@@ -60,3 +60,16 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+#OldTimeRadio specific exclusions
+*.mp3
+*.ogg
+*.m3u
+*.acc
+*.aif
+*.iff
+*.m4a
+*.mid
+*.mpa
+*.wav
+*.wma
