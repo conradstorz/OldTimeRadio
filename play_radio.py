@@ -5,4 +5,9 @@ import pygame
 def play(directory):
 
     file = random.choice(os.listdir(directory))
-	pygame.play(file) 
+	pygame.init()
+	pygame.mixer.init()
+	pygame.mixer.music.load(file)
+	pygame.mixer.music.play()
+
+play(./recordings)
