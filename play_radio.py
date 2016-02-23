@@ -10,4 +10,4 @@ def play(directory):
 	pygame.mixer.music.load(file)
 	pygame.mixer.music.play()
 
-play(./recordings)
+play(./recordings/OTRadio/)
