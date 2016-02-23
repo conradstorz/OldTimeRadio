@@ -1,5 +1,6 @@
 import os
 import sys
+from time import sleep
 import random
 import pygame
 
