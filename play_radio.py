@@ -10,9 +10,12 @@ def play(directory):
     pygame.init()
     pygame.mixer.init()
     pygame.mixer.music.set_volume(1)
-    pygame.mixer.music.load(directory + file)
-    print 'Playing: ', file
-    pygame.mixer.music.play()
+    try:
+        pygame.mixer.music.load(directory + file)
+        print 'Playing: ', file
+        pygame.mixer.music.play()
+    except:
+        print 'Could not play file: ', file
 
 while True:
     playcount = 20
