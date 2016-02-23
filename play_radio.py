@@ -11,6 +11,10 @@ def play(directory):
     pygame.mixer.music.load(directory + file)
     pygame.mixer.music.play()
 
-play('./recordings/OTRadio/')
-while pygame.mixer.music.get_busy() == True:
-    continue
+while True:
+    playcount = 100
+    play('./recordings/OTRadio/')
+    while pygame.mixer.music.get_busy() == True and playcount:
+        sleep(.1)
+        playcount -= 1
+        continue
