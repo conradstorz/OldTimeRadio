@@ -9,6 +9,7 @@ def play(directory):
     file = random.choice(os.listdir(directory))
     pygame.init()
     pygame.mixer.init()
+    pygame.set_volume(1)
     pygame.mixer.music.load(directory + file)
     print 'Playing: ', file
     pygame.mixer.music.play()
