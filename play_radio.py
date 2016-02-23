@@ -12,3 +12,5 @@ def play(directory):
     pygame.mixer.music.play()
 
 play('./recordings/OTRadio/')
+while pygame.mixer.music.get_busy() == True:
+    continue
