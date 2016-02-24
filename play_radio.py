@@ -1,15 +1,16 @@
-import os
-import sys
+from os import listdir
 from time import sleep
-import random
+from random import choice
 import pygame
 
-def play(directory):
+files = listdir(directory)
 
-    file = random.choice(os.listdir(directory))
-    pygame.init()
-    pygame.mixer.init()
-    pygame.mixer.music.set_volume(1)
+pygame.init()
+pygame.mixer.init()
+pygame.mixer.music.set_volume(1)
+
+def play(directory):
+    file = choice(files)
     try:
         pygame.mixer.music.load(directory + file)
         print 'Playing: ', file
@@ -17,10 +18,11 @@ def play(directory):
     except:
         print 'Could not play file: ', file
 
+
 while True:
     playcount = 20
     play('./recordings/OTRadio/')
     while pygame.mixer.music.get_busy() == True and playcount:
         sleep(1)
         playcount -= 1
-        continue
+    
