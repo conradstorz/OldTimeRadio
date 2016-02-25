@@ -8,3 +8,11 @@ interesting time for me. The last world war was underway, radio shows were the T
 with creative content.
 
 This project will be able to access any time period or all time periods depending...
+
+
+
+Some (maybe not all) requirements:
+
+sudo apt-get install espeak python-espeak
+
+sudo apt-get install python-pygame
