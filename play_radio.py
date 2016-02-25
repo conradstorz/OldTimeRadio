@@ -43,6 +43,9 @@ def filter_files(files, parameter):
 
 
 if __name__ == '__main__': #begin operation of radio
+    sleep(1)
+    speak('welcome to the old time radio project')
+    sleep(1)
     while True:
         playcount = 20
         play(FILES)
