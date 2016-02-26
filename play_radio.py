@@ -67,7 +67,7 @@ if __name__ == '__main__': #begin operation of radio
     sleep(5)
     we_should_play_a_commercial = False
     while True:
-        playcount = 3
+        playcount = 300
         current_file = play(FILES, we_should_play_a_commercial)
         print(current_file)
         while pygame.mixer.music.get_busy() == True and playcount:
