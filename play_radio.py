@@ -12,7 +12,7 @@ pygame.init()
 pygame.mixer.init()
 pygame.mixer.music.set_volume(1)
 
-def play(files_list, we_should_play_a_commercial=False):
+def play(files_list, play_a_commercial=False):
 
     def a_commercial(file_name):
         if 'Commercial' in file_name:
@@ -23,7 +23,7 @@ def play(files_list, we_should_play_a_commercial=False):
     selected_file = choice(files_list)
     
     # play the correct type of file
-    if we_should_play_a_commercial:
+    if play_a_commercial:
         while not(a_commercial(selected_file)):
             selected_file = choice(files_list)
     else:
@@ -36,7 +36,7 @@ def play(files_list, we_should_play_a_commercial=False):
         pygame.mixer.music.play()
     except:
         print('Could not play file: ', selected_file)
-    return (selected_file, we_should_play_a_commercial)
+    return selected_file
 
 def speak(text, gender='f3', emphasis='5', speed='150'):
     """
@@ -65,9 +65,9 @@ if __name__ == '__main__': #begin operation of radio
     sleep(1)
     speak('welcome to the old time radio project')
     sleep(5)
+    we_should_play_a_commercial = False
     while True:
-        we_should_play_a_commercial = False
-        playcount = 300
+        playcount = 3
         current_file = play(FILES, we_should_play_a_commercial)
         print(current_file)
         while pygame.mixer.music.get_busy() == True and playcount:
@@ -76,7 +76,4 @@ if __name__ == '__main__': #begin operation of radio
                 print(playcount, ' seconds left to play.')
             playcount -= 1
         
-        if current_file[1] == False:  # is this a commercial? (True is commercial)
-            should_we_play_a_commercial = True
-        else:
-            should_we_play_a_commercial = False
+        we_should_play_a_commercial = not(we_should_play_a_commercial)
