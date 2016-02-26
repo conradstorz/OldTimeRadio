@@ -16,7 +16,7 @@ def play(files_list, we_should_play_a_commercial=False):
 
     def a_commercial(file_name):
         if 'Commercial' in file_name:
-            print('Has commercial in name.')
+            print(file_name, '... Has commercial in name.')
             return True
         return False
 
