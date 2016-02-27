@@ -57,7 +57,7 @@ def load_datetime():
 def filter_files(files, parameter):
     """
     Return a subset of the files defined by parameter
-    slack"""
+    """
     return files
 
 def parse_dates_in_library(library_directory):
@@ -68,7 +68,6 @@ def parse_dates_in_library(library_directory):
     """
     datedict = {}
     filenames = open(library_directory)
-  
   
     for name in filenames:
         #Finds any 6 or 8 digit date with D/M/Y unseparated
