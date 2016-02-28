@@ -16,3 +16,5 @@ Some (maybe not all) requirements:
 sudo apt-get install espeak python-espeak
 
 sudo apt-get install python-pygame
+
+sudo pip install python-dateutil
