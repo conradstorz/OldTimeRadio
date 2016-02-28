@@ -6,9 +6,65 @@ import pygame
 from espeak import espeak
 import re
 from dateutil.parser import parse
+from collections import namedtuple
 
 DIRECTORY = './recordings/OTRadio/'
 FILES = listdir(DIRECTORY)
+
+def parse_date(name):
+    #Finds any 6 or 8 digit date with D/M/Y unseparated
+    #or separated by '-' or '/'
+    date = re.search("([\d][-/]?){6}|([\d][-/]?){8}", name)
+    if date:
+        date = parse(date.group(0), yearfirst=True)
+    else:
+        # need to define a value for unpasrseable name
+        pass
+    return date
+
+def parse_dates_in_library(library_directory):
+    """
+    Goes through a list of file names and creates a dict
+    containing a datetime and the corresponding filename for
+    every file with a date in the title.
+    """
+    datedict = {}
+    filenames = open(library_directory)
+  
+    for name in filenames:
+        date = parse_date(name)
+        datedict[date] = name        
+    return datedict
+
+
+Record = namedtuple('Recording', 'ID Filename URL Release_date Description Genre Length Num_of_plays Last_played Available Unavailable Was_interrupted')
+"""
+These are the details to be tracked for each recording available to be played.
+Notes:
+    ID(str) is a randomly assigned identifier when an item is first identified
+    Filename(str) is the usual filename.ext 
+    URL(str) is a universal resource locator for the recording. this can be used for online streams
+    Release_date(datetime) is the original date that this recording was made/aired
+    Description(str) use as needed to describe recording
+    Genre(str) News, Comedy, Drama, Commercial, etc...
+    Length(int) Total playing time in seconds. For straming media this should be set to 'Nonetype' or maybe -1
+    Num_of_plays(int) Starts at zero and increment for each time played
+    Last_played(datetime) timestamp
+    Available(bool) was this recording available the last time it was tried?
+    Unavailable(list(datetime)) a timestamp for each unplayable attempt
+    Was_interrupted(list(tuple(datetime, length(int)))) A list of events where the user skipped a recording and the number of seconds played before interruption.
+"""
+
+Identifier = 100000
+Recording_list = []
+for f in FILES:
+    date = parse_date(f)
+    Identifier += 1
+    r = Record(ID=Identifier, Filename=f, URL='', Release_date=date, Description='', Genre='', Length=0, Num_of_plays=0,
+                Last_played=None, Available=False, Unavailable=[], Was_interrupted=[])
+    Recording_list.append(r)
+
+print(Recording_list)
 
 pygame.init()
 pygame.mixer.init()
@@ -61,25 +117,6 @@ def filter_files(files, parameter):
     """
     return files
 
-def parse_dates_in_library(library_directory):
-    """
-    Goes through a list of file names and creates a dict
-    containing a datetime and the corresponding filename for
-    every file with a date in the title.
-    """
-    datedict = {}
-    filenames = open(library_directory)
-  
-    for name in filenames:
-        #Finds any 6 or 8 digit date with D/M/Y unseparated
-        #or separated by '-' or '/'
-        date = re.search("([\d][-/]?){6}|([\d][-/]?){8}", name)
-        if date:
-            date = parse(date.group(0), yearfirst=True)
-            #This is where we'll need to actually store it
-            datedict[date] = name
-
-    return datedict
 
 # end of function declarations
 
