@@ -4,6 +4,8 @@ from time import sleep
 from random import choice
 import pygame
 from espeak import espeak
+import re
+from dateutil.parser import parse
 
 DIRECTORY = './recordings/OTRadio/'
 FILES = listdir(DIRECTORY)
@@ -58,6 +60,26 @@ def filter_files(files, parameter):
     Return a subset of the files defined by parameter
     """
     return files
+
+def parse_dates_in_library(library_directory):
+    """
+    Goes through a list of file names and creates a dict
+    containing a datetime and the corresponding filename for
+    every file with a date in the title.
+    """
+    datedict = {}
+    filenames = open(library_directory)
+  
+    for name in filenames:
+        #Finds any 6 or 8 digit date with D/M/Y unseparated
+        #or separated by '-' or '/'
+        date = re.search("([\d][-/]?){6}|([\d][-/]?){8}", name)
+        if date:
+            date = parse(date.group(0), yearfirst=True)
+            #This is where we'll need to actually store it
+            datedict[date] = name
+
+    return datedict
 
 # end of function declarations
 
