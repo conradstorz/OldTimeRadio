@@ -21,10 +21,10 @@ def play(files_list, play_a_commercial=False):
         return False
 
     selected_file = choice(files_list)
-    
+
     # play the correct type of file
     if play_a_commercial:
-        while not(a_commercial(selected_file)):
+        while not a_commercial(selected_file):
             selected_file = choice(files_list)
     else:
         while a_commercial(selected_file):
@@ -46,10 +46,11 @@ def speak(text, gender='f3', emphasis='5', speed='150'):
 
 def load_datetime():
     """
-    Get the current date and time from the system. 
+    Get the current date and time from the system.
     Check for presence of a hardware real-time-clock and compare result
     to system time. If there is a discrepancy, try to find an NTP server
-    to verify actual real-world time. Order of precedence is; NTP, RTC, system-clock.
+    to verify actual real-world time. 
+    Order of precedence is; NTP, RTC, system-clock.
     """
 
 def filter_files(files, parameter):
@@ -72,8 +73,8 @@ if __name__ == '__main__': #begin operation of radio
         print(current_file)
         while pygame.mixer.music.get_busy() == True and playcount:
             sleep(1)
-            if not (playcount % 50):
+            if not playcount % 50:
                 print(playcount, ' seconds left to play.')
             playcount -= 1
-        
-        we_should_play_a_commercial = not(we_should_play_a_commercial)
+
+        we_should_play_a_commercial = not we_should_play_a_commercial
