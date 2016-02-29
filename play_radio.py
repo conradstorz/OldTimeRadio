@@ -18,8 +18,11 @@ def parse_date(name):
     date = re.search("([\d][-/]?){6}|([\d][-/]?){8}", name)
     if date:
         date = parse(date.group(0), yearfirst=True)
+        #Dateutil bug sometimes returns 21st century. Force 20th 
+        if date.year > 1999:
+            date = date.replace(year = date.year - 100)
     else:
-        # need to define a value for unpasrseable name
+        # need to define a value for unparseable name
         pass
     return date
 
