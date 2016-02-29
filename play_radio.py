@@ -58,6 +58,7 @@ Identifier = 100000
 Recording_dict = {}  # TODO create storage and retrieval routines
 
 # parse dates from filenames and build dictionary
+print('Building database...')
 for f in FILES:
     date = parse_date(f)
     Identifier += 1
@@ -76,7 +77,7 @@ for f in FILES:
     r['Unavailable_list'] = []
     r['Was_interrupted'] = []
     Recording_dict[r['URL']] = r
-
+print('Finished.')
 
 # initialize pygame audio mixer
 pygame.init()
