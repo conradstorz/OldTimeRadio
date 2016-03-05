@@ -6,10 +6,12 @@ import pygame
 from espeak import espeak
 import re
 from dateutil.parser import parse
-#from collections import namedtuple
 from datetime import datetime
 
 DIRECTORY = './recordings/OTRadio/'
+METADATA_FILE = 'metadata/recordings.mtd'
+
+# load the list of files in the default directory 
 FILES = listdir(DIRECTORY)
 
 def parse_date(name):
@@ -19,8 +21,7 @@ def parse_date(name):
     if date:
         date = parse(date.group(0), yearfirst=True)
     else:
-        # need to define a value for unpasrseable name
-        pass
+        date = None
     return date
 
 def parse_dates_in_library(library_directory):
@@ -56,6 +57,23 @@ Notes:
 
 Identifier = 100000
 Recording_dict = {}  # TODO create storage and retrieval routines
+
+# the current plan is to use pickle module
+def retrieve_recordings_data():
+    """
+    Check for existance of a metadata store for the recordings known to this program
+    """
+    # return data_dict
+
+def store_recordings_data(data_dict):
+    """
+    Create/Update the file in local storage that contains metadata for the recordings known to this program
+    """
+
+# attempt to retrieve database from local storage
+# Recording_dict = retrieve_recordings_data()
+# if Recording_dict == {}:
+#     Raise exception
 
 # parse dates from filenames and build dictionary
 print('Building database...')
