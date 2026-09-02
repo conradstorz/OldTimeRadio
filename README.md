@@ -11,10 +11,37 @@ This project will be able to access any time period or all time periods dependin
 
 
 
-Some (maybe not all) requirements:
+## Running
 
-sudo apt-get install espeak python-espeak
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
-sudo apt-get install python-pygame
+    uv sync
+    uv run otradio --library /path/to/recordings
 
-sudo pip install python-dateutil
+Spoken announcements need the `espeak-ng` command:
+
+    sudo apt-get install espeak-ng
+
+Without it the radio still plays; it just stays quiet between shows.
+
+### Options
+
+| Flag | Environment variable | Default |
+|---|---|---|
+| `--library` | `OTRADIO_LIBRARY` | `./recordings/OTRadio` |
+| `--volume` | `OTRADIO_VOLUME` | `1.0` |
+| `--max-play-seconds` | `OTRADIO_MAX_PLAY_SECONDS` | unlimited |
+| `--commercial-marker` | `OTRADIO_COMMERCIAL_MARKER` | `commercial` |
+| `--no-speech` | `OTRADIO_SPEECH` | speech on |
+| `--dry-run` | — | off |
+
+Recordings whose filename contains the commercial marker are treated as
+commercials and interleaved between shows. Broadcast dates are read from the
+filename where one is present.
+
+## Tests
+
+    uv run pytest
+
+The whole suite runs without audio hardware. Only the `pygame` and `espeak-ng`
+adapters need the Pi.

@@ -6,35 +6,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Raspberry Pi appliance that boots straight into an audio player, to be installed inside a 1940s radio cabinet. It shuffles old-time radio recordings from local disk, interleaving a commercial between shows, and speaks status through espeak.
 
-The entire application is `play_radio.py`. There is no package, no test suite, no build step, and no dependency manifest — `README.md` lists the deps as raw apt/pip commands.
+The application is the `otradio` package. `play_radio.py` is a deprecated shim kept so existing boot scripts keep working; the real code lives under `otradio/`.
 
-## Running
+## Commands
 
-```
-python play_radio.py
-```
+| Task | Command |
+|---|---|
+| Install deps | `uv sync` |
+| Run the radio | `uv run otradio --library <dir>` |
+| Run off-device | `uv run otradio --library <dir> --dry-run --no-speech` |
+| Run tests | `uv run pytest` |
+| Run one test | `uv run pytest tests/test_dates.py::test_four_digit_year_does_not_crash -v` |
 
-Target platform is Raspberry Pi / Linux. `pygame` and `python-espeak` are the hard dependencies; `espeak` has no Windows build, so the module import fails on the dev machine here. Anything that needs to actually run must run on the Pi. Static reasoning and edits work fine locally.
-
-Deps per README: `apt-get install espeak python-espeak python-pygame`, `pip install python-dateutil`.
-
-## Audio library
-
-`DIRECTORY = './recordings/OTRadio/'` is read with `listdir` **at module import time**, so the script raises immediately if that directory does not exist. Media extensions (`*.mp3`, `*.wav`, …) are gitignored — the library lives on the Pi, never in the repo. Any script or test that imports `play_radio` inherits this import-time filesystem dependency.
+Target platform is Raspberry Pi OS Bookworm (Python 3.11). The full test suite
+runs on Windows: only `otradio/audio.py` and `otradio/speech.py` touch
+hardware, and both have null implementations.
 
 ## Architecture
 
-**`Recording_dict`** is the in-memory database, built at import time and keyed by *URL* (`DIRECTORY + filename`), not by filename. Every producer of a key must apply the same `DIRECTORY +` prefix — `pick_a_random_file()` does this, which is why its return value can be passed straight to `play()`. `Identifier` is a module-level counter starting at 100000.
+`otradio` splits into pure logic and two hardware adapters. Nothing does I/O at
+import time.
 
-Each record carries the schema documented in the docstring near the top of the file: `ID`, `Filename`, `URL`, `Release_date`, `Description`, `Genre`, `Length`, `Num_of_plays`, `Last_played`, `Available`, `Unavailable_list`, `Was_interrupted`. Adding a field means updating both that docstring and the build loop.
+| Module | Responsibility |
+|---|---|
+| `config.py` | `Config` from CLI flags, then env vars, then defaults |
+| `dates.py` | `parse_release_date(filename)` — pure |
+| `catalog.py` | `Recording` model; `Catalog.from_directory()` scans and partitions |
+| `store.py` | `PlayStats` and the `MetadataStore` protocol |
+| `audio.py` | `Player` protocol; `PygamePlayer` (lazy pygame import) and `NullPlayer` |
+| `speech.py` | `Speaker` protocol; `EspeakSpeaker` (subprocess) and `NullSpeaker` |
+| `scheduler.py` | `AlternatingScheduler` — what plays next |
+| `app.py` | `Radio` run loop, `build_radio()`, `main()` |
 
-**Dates come from filenames.** `parse_date()` regex-matches a 6- or 8-digit date (optionally `-`/`/` separated), parses it `yearfirst=True`, then subtracts 100 years from any result after 1999 — a workaround for dateutil resolving 2-digit years into the 21st century. Recordings are all pre-1950s, so 20th century is always the right answer here.
+`pygame` must stay inside `PygamePlayer.start()`. Importing it at module level
+breaks the hardware-free test suite; `tests/test_audio.py` asserts this.
 
-**Persistence is unimplemented.** `retrieve_recordings_data()` and `store_recordings_data()` are empty stubs; the plan noted in-file is `pickle`, and `METADATA_FILE = 'metadata/recordings.mtd'` is declared but unused. The commented-out retrieve/raise block in the module body is where loading is meant to hook in. This is the main open work item — play counts, interruptions, and availability history are all tracked in memory and lost on exit.
+**Recording identity is the library-relative path.** It must stay stable across
+runs — `PlayStats` is keyed by it, and persistence will rely on that.
 
-**Main loop** (`__main__`) alternates `we_should_play_a_commercial` on each iteration; "commercial" is detected purely by the substring `'Commercial'` in the filename, and `pick_a_random_file()` rejection-samples until it gets the right type — an empty or single-type library makes that loop spin forever. Playback is capped by a 300-second `playcount` countdown regardless of actual track length.
+**Audio files are gitignored** (`*.mp3`, `*.wav`, …); the library lives on the
+Pi. Tests build temporary libraries from empty files, which is enough because
+nothing in the tested path reads audio data.
 
-**Stubs and dead code to be aware of before "fixing" them:** `load_datetime()` (intended NTP → RTC → system-clock precedence) and `filter_files()` are declared but empty/pass-through. `parse_dates_in_library()` is unused and inconsistent with the rest — it `open()`s its argument as a file of names rather than listing a directory. `speak()` accepts `gender`/`emphasis`/`speed` and ignores them.
+## Unimplemented, by design
+
+`InMemoryStore.save()` is a deliberate no-op — play history does not survive a
+reboot yet. The follow-on work, in order: a `JsonMetadataStore`, era/genre
+filtering, a skip control that records an `Interruption`, and `load_datetime()`
+(NTP → RTC → system clock). See
+`docs/superpowers/specs/2026-09-02-otradio-refactor-design.md`.
+
+Speech is an open item: `EspeakSpeaker` shells out to `espeak-ng` because the
+`espeak` Python binding is Python 2-era. If the binding installs on the Pi, an
+alternative behind the same protocol is a one-file change.
 
 ## `_reference/`
 
