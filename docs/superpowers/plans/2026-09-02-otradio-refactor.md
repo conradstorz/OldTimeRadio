@@ -985,6 +985,13 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'otradio.config'`
 
 - [ ] **Step 3: Write the implementation**
 
+> **Amended during execution (approved):** the code below parses env values while building
+> argparse `default=` arguments, so a malformed `OTRADIO_VOLUME` or `OTRADIO_MAX_PLAY_SECONDS`
+> raises a raw `ValueError` instead of argparse's clean error. The shipped implementation
+> computes env-derived defaults after constructing the parser and routes failures through
+> `parser.error(...)`, giving `SystemExit(2)` with a message naming the variable. See
+> `otradio/config.py` for the authoritative version.
+
 Create `otradio/config.py`:
 
 ```python
