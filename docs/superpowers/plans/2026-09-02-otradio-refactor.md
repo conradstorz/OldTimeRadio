@@ -636,23 +636,27 @@ class InMemoryStore:
         self._stats: dict[str, PlayStats] = {}
 
     def stats_for(self, recording_id: str) -> PlayStats:
+        """Pure read. Does not create an entry."""
+        return self._stats.get(recording_id, PlayStats())
+
+    def _mutable_stats_for(self, recording_id: str) -> PlayStats:
         return self._stats.setdefault(recording_id, PlayStats())
 
     def record_played(self, recording_id: str, when: datetime) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.num_of_plays += 1
         stats.last_played = when
         stats.available = True
 
     def record_unavailable(self, recording_id: str, when: datetime) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.unavailable_at.append(when)
         stats.available = False
 
     def record_interruption(
         self, recording_id: str, when: datetime, seconds_played: int
     ) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.interruptions.append(Interruption(at=when, seconds_played=seconds_played))
 
     def save(self) -> None:
@@ -662,7 +666,7 @@ class InMemoryStore:
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest tests/test_store.py -v`
-Expected: PASS — 7 passed.
+Expected: PASS — 8 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -2016,7 +2020,7 @@ Expected: PASS — 4 passed.
 - [ ] **Step 7: Run the whole suite**
 
 Run: `uv run pytest -v`
-Expected: PASS — 86 passed, 0 failed.
+Expected: PASS — 87 passed, 0 failed.
 
 - [ ] **Step 8: Verify the program runs end to end**
 
@@ -2131,7 +2135,7 @@ alternative behind the same protocol is a one-file change.
 - [ ] **Step 11: Run the whole suite once more**
 
 Run: `uv run pytest`
-Expected: PASS — 86 passed.
+Expected: PASS — 87 passed.
 
 - [ ] **Step 12: Commit**
 
@@ -2150,7 +2154,7 @@ load_datetime (empty), METADATA_FILE and the Identifier counter."
 
 After Task 9, all of the following must hold:
 
-- [ ] `uv run pytest` — 86 passed, 0 failed
+- [ ] `uv run pytest` — 87 passed, 0 failed
 - [ ] `uv run otradio --help` — exit 0, lists every flag in the config table
 - [ ] `uv run otradio --library <empty dir> --dry-run` — exit 1 with a clear message, no traceback
 - [ ] `git grep -n "Recording_dict\|parse_dates_in_library\|filter_files\|METADATA_FILE"` — no matches outside `docs/`
