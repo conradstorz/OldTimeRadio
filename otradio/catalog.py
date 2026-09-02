@@ -6,13 +6,12 @@ from datetime import date
 from enum import Enum
 from pathlib import Path
 
+from otradio.config import DEFAULT_COMMERCIAL_MARKER
 from otradio.dates import parse_release_date
 
 AUDIO_EXTENSIONS = frozenset(
     {".mp3", ".ogg", ".wav", ".m4a", ".aac", ".aif", ".aiff", ".flac", ".wma", ".mid"}
 )
-
-DEFAULT_COMMERCIAL_MARKER = "commercial"
 
 
 class LibraryNotFound(Exception):

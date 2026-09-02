@@ -46,7 +46,7 @@ def test_partitions_shows_and_commercials(tmp_path):
 
 
 def test_commercial_detection_is_case_insensitive(tmp_path):
-    library = make_library(tmp_path, ["pepsi commercial spot.mp3"])
+    library = make_library(tmp_path, ["Pepsi Commercial Spot.mp3"])
     catalog = Catalog.from_directory(library)
     assert len(catalog.commercials) == 1
 

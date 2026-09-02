@@ -96,7 +96,10 @@ class PygamePlayer:
 
     def play(self, path: Path) -> None:
         if self._pygame is None:
-            raise PlaybackError("Player.start() must be called before play().")
+            raise PlaybackError(
+                "Player is not ready to play: call start() first, or it has "
+                "already been closed."
+            )
         try:
             self._pygame.mixer.music.load(str(path))
             self._pygame.mixer.music.play()

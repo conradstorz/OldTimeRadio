@@ -114,6 +114,38 @@ def test_playback_failure_is_recorded_and_the_loop_continues():
     assert [p.name for p in player.played] == ["commercial-a.mp3"]
 
 
+class SleepSpy:
+    """Records every call to the injected sleep so tests can assert on it."""
+
+    def __init__(self) -> None:
+        self.calls: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.calls.append(seconds)
+
+
+def test_playback_failure_still_yields_a_sleep():
+    """Regression: a library pygame cannot decode must not spin the CPU."""
+    sleep = SleepSpy()
+    player = NullPlayer(fail_on={"show-a.mp3", "commercial-a.mp3"})
+    radio, player, _speaker, _store = make_radio(player=player)
+    radio._sleep = sleep
+    radio.run(max_iterations=2)
+    assert sleep.calls == [app.POLL_INTERVAL_SECONDS, app.POLL_INTERVAL_SECONDS]
+
+
+def test_a_recording_that_is_never_busy_still_yields_a_sleep():
+    """Regression: --dry-run produced tens of thousands of log lines in
+    seconds because a recording that finishes instantly looped with no
+    delay at all."""
+    sleep = SleepSpy()
+    player = NullPlayer(busy_polls=0)
+    radio, player, _speaker, _store = make_radio(player=player)
+    radio._sleep = sleep
+    radio.run(max_iterations=2)
+    assert sleep.calls == [app.POLL_INTERVAL_SECONDS, app.POLL_INTERVAL_SECONDS]
+
+
 def test_watchdog_stops_a_recording_that_never_ends():
     config = Config.from_cli(["--max-play-seconds", "5"], env={})
     clock = iter([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])

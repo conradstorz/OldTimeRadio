@@ -31,7 +31,16 @@ class PlayStats:
 
 
 class MetadataStore(Protocol):
-    """Reads and writes PlayStats, keyed by Recording.id."""
+    """Reads and writes PlayStats, keyed by Recording.id.
+
+    save() is called exactly once, from Radio.run()'s `finally`. Do not rely
+    on it as the only persistence point: this appliance lives in a cabinet
+    and is normally switched off at the wall, not shut down gracefully, so
+    that `finally` block will typically never execute. A persistent
+    implementation must flush each change as it is recorded (i.e. inside
+    record_played / record_unavailable / record_interruption) and treat
+    save() as, at best, a final flush on the rare clean exit.
+    """
 
     def stats_for(self, recording_id: str) -> PlayStats:
         """Pure read. Does not create an entry for an unknown recording_id."""

@@ -71,6 +71,7 @@ class Radio:
         except PlaybackError as exc:
             logger.warning("%s", exc)
             self._store.record_unavailable(recording.id, self._now())
+            self._sleep(POLL_INTERVAL_SECONDS)
             return
 
         self._store.record_played(recording.id, self._now())
@@ -86,6 +87,10 @@ class Radio:
         limit = self._config.max_play_seconds
         deadline = None if limit is None else self._monotonic() + limit
 
+        # At least one poll interval is spent per recording even if the
+        # player is never busy (an instantly-finished or unplayable file),
+        # so the outer loop can never spin faster than POLL_INTERVAL_SECONDS.
+        self._sleep(POLL_INTERVAL_SECONDS)
         while self._player.is_busy():
             if deadline is not None and self._monotonic() >= deadline:
                 logger.warning(

@@ -41,3 +41,16 @@ def test_legacy_script_is_a_shim_with_no_logic():
     assert "pygame" not in text
     assert "Recording_dict" not in text
     assert len(text.splitlines()) < 20
+
+
+def test_legacy_script_runs_and_shows_help():
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "play_radio.py", "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "--library" in result.stdout
