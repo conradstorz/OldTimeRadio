@@ -58,6 +58,13 @@ def test_stats_are_kept_per_recording():
     assert store.stats_for("b.mp3").num_of_plays == 0
 
 
+def test_stats_for_does_not_create_entry_for_unknown_recording():
+    store = InMemoryStore()
+    store.stats_for("never-played.mp3")
+    store.stats_for("never-played.mp3")
+    assert "never-played.mp3" not in store._stats
+
+
 def test_save_is_a_no_op_that_does_not_raise():
     """Persistence is deliberately unimplemented; save() exists for the protocol."""
     store = InMemoryStore()

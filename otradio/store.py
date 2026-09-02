@@ -33,7 +33,9 @@ class PlayStats:
 class MetadataStore(Protocol):
     """Reads and writes PlayStats, keyed by Recording.id."""
 
-    def stats_for(self, recording_id: str) -> PlayStats: ...
+    def stats_for(self, recording_id: str) -> PlayStats:
+        """Pure read. Does not create an entry for an unknown recording_id."""
+        ...
 
     def record_played(self, recording_id: str, when: datetime) -> None: ...
 
@@ -53,23 +55,27 @@ class InMemoryStore:
         self._stats: dict[str, PlayStats] = {}
 
     def stats_for(self, recording_id: str) -> PlayStats:
+        """Pure read. Does not create an entry."""
+        return self._stats.get(recording_id, PlayStats())
+
+    def _mutable_stats_for(self, recording_id: str) -> PlayStats:
         return self._stats.setdefault(recording_id, PlayStats())
 
     def record_played(self, recording_id: str, when: datetime) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.num_of_plays += 1
         stats.last_played = when
         stats.available = True
 
     def record_unavailable(self, recording_id: str, when: datetime) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.unavailable_at.append(when)
         stats.available = False
 
     def record_interruption(
         self, recording_id: str, when: datetime, seconds_played: int
     ) -> None:
-        stats = self.stats_for(recording_id)
+        stats = self._mutable_stats_for(recording_id)
         stats.interruptions.append(Interruption(at=when, seconds_played=seconds_played))
 
     def save(self) -> None:
