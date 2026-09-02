@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from otradio.store import InMemoryStore, PlayStats
+from otradio.store import InMemoryStore, Interruption, PlayStats
 
 
 def test_unknown_recording_starts_with_blank_stats():
@@ -71,3 +71,35 @@ def test_save_is_a_no_op_that_does_not_raise():
     store.record_played("a.mp3", datetime(1952, 7, 26))
     store.save()
     assert store.stats_for("a.mp3").num_of_plays == 1
+
+
+def test_stats_for_mutating_returned_scalar_does_not_corrupt_store():
+    store = InMemoryStore()
+    store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
+    stats = store.stats_for("gunsmoke.mp3")
+    stats.num_of_plays = 999
+    assert store.stats_for("gunsmoke.mp3").num_of_plays == 1
+
+
+def test_stats_for_mutating_returned_unavailable_at_does_not_corrupt_store():
+    store = InMemoryStore()
+    when = datetime(1952, 7, 26)
+    store.record_unavailable("broken.mp3", when)
+    stats = store.stats_for("broken.mp3")
+    stats.unavailable_at.append(datetime(1999, 1, 1))
+    assert store.stats_for("broken.mp3").unavailable_at == [when]
+
+
+def test_stats_for_mutating_returned_interruptions_does_not_corrupt_store():
+    store = InMemoryStore()
+    when = datetime(1952, 7, 26)
+    store.record_interruption("gunsmoke.mp3", when, seconds_played=42)
+    stats = store.stats_for("gunsmoke.mp3")
+    stats.interruptions.append(Interruption(at=when, seconds_played=1))
+    assert len(store.stats_for("gunsmoke.mp3").interruptions) == 1
+
+
+def test_stats_for_returns_a_new_object_each_call():
+    store = InMemoryStore()
+    store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
+    assert store.stats_for("gunsmoke.mp3") is not store.stats_for("gunsmoke.mp3")

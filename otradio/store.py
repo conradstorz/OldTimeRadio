@@ -6,7 +6,7 @@ A future JsonMetadataStore implements the same protocol, and nothing else in
 the package changes.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Protocol
 
@@ -43,7 +43,8 @@ class MetadataStore(Protocol):
     """
 
     def stats_for(self, recording_id: str) -> PlayStats:
-        """Pure read. Does not create an entry for an unknown recording_id."""
+        """Pure read. Does not create an entry for an unknown recording_id, and
+        returns a snapshot the caller cannot use to mutate the store."""
         ...
 
     def record_played(self, recording_id: str, when: datetime) -> None: ...
@@ -64,8 +65,14 @@ class InMemoryStore:
         self._stats: dict[str, PlayStats] = {}
 
     def stats_for(self, recording_id: str) -> PlayStats:
-        """Pure read. Does not create an entry."""
-        return self._stats.get(recording_id, PlayStats())
+        """Pure read. Does not create an entry, and returns a snapshot the
+        caller cannot use to mutate the store."""
+        stats = self._stats.get(recording_id, PlayStats())
+        return replace(
+            stats,
+            unavailable_at=list(stats.unavailable_at),
+            interruptions=list(stats.interruptions),
+        )
 
     def _mutable_stats_for(self, recording_id: str) -> PlayStats:
         return self._stats.setdefault(recording_id, PlayStats())
