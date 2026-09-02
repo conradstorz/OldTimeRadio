@@ -244,6 +244,7 @@ Replaces the 12-key dict and its docstring schema. Fixes defect **D5** (unstable
 Create `tests/test_catalog.py`:
 
 ```python
+from dataclasses import FrozenInstanceError
 from datetime import date
 from pathlib import Path
 
@@ -340,7 +341,7 @@ def test_missing_directory_raises_library_not_found(tmp_path):
 def test_recording_is_immutable(tmp_path):
     library = make_library(tmp_path, ["Gunsmoke 52-07-26.mp3"])
     recording = Catalog.from_directory(library).all[0]
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         recording.filename = "other.mp3"
 
 
@@ -888,6 +889,7 @@ Precedence is flag, then environment variable, then default.
 Create `tests/test_config.py`:
 
 ```python
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -968,7 +970,7 @@ def test_blank_max_play_seconds_env_is_treated_as_unlimited():
 
 def test_config_is_immutable():
     config = Config.from_cli([], env={})
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         config.volume = 0.5
 ```
 
@@ -1577,7 +1579,7 @@ from otradio.app import GREETING, Radio
 from otradio.audio import NullPlayer
 from otradio.catalog import Catalog, Genre, Recording
 from otradio.config import Config
-from otradio.scheduler import AlternatingScheduler
+from otradio.scheduler import AlternatingScheduler, EmptyLibrary
 from otradio.speech import NullSpeaker
 from otradio.store import InMemoryStore
 
@@ -1705,7 +1707,7 @@ def test_player_is_closed_even_when_the_loop_raises():
     radio, player, _speaker, _store = make_radio(
         show_names=[], commercial_names=[]
     )
-    with pytest.raises(Exception):
+    with pytest.raises(EmptyLibrary):
         radio.run(max_iterations=1)
     assert player.closed is True
 
