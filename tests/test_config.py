@@ -63,6 +63,46 @@ def test_flags_override_environment_variables():
     assert config.volume == 0.9
 
 
+def test_max_play_seconds_flag_overrides_environment_variable():
+    config = Config.from_cli(
+        ["--max-play-seconds", "900"],
+        env={"OTRADIO_MAX_PLAY_SECONDS": "300"},
+    )
+    assert config.max_play_seconds == 900
+
+
+def test_commercial_marker_flag_overrides_environment_variable():
+    config = Config.from_cli(
+        ["--commercial-marker", "sponsor"],
+        env={"OTRADIO_COMMERCIAL_MARKER": "advert"},
+    )
+    assert config.commercial_marker == "sponsor"
+
+
+def test_no_speech_flag_overrides_environment_variable():
+    config = Config.from_cli(
+        ["--no-speech"],
+        env={"OTRADIO_SPEECH": "1"},
+    )
+    assert config.speech_enabled is False
+
+
+def test_malformed_volume_env_exits_with_usage_error(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        Config.from_cli([], env={"OTRADIO_VOLUME": "abc"})
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "OTRADIO_VOLUME: invalid float value: 'abc'" in captured.err
+
+
+def test_malformed_max_play_seconds_env_exits_with_usage_error(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        Config.from_cli([], env={"OTRADIO_MAX_PLAY_SECONDS": "abc"})
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "OTRADIO_MAX_PLAY_SECONDS: invalid int value: 'abc'" in captured.err
+
+
 @pytest.mark.parametrize("value", ["0", "false", "False", "no", "off", ""])
 def test_speech_env_falsey_values_disable_speech(value):
     assert Config.from_cli([], env={"OTRADIO_SPEECH": value}).speech_enabled is False

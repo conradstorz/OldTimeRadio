@@ -53,32 +53,27 @@ class Config:
         parser.add_argument(
             "--library",
             type=Path,
-            default=Path(env.get("OTRADIO_LIBRARY") or DEFAULT_LIBRARY_DIR),
             help="Directory holding the recordings.",
         )
         parser.add_argument(
             "--volume",
             type=float,
-            default=float(env.get("OTRADIO_VOLUME") or 1.0),
             help="Playback volume, 0.0 to 1.0.",
         )
         parser.add_argument(
             "--max-play-seconds",
             type=_optional_int,
-            default=_optional_int(env.get("OTRADIO_MAX_PLAY_SECONDS")),
             help="Watchdog only: give up on a recording after this long. "
             "Unlimited by default.",
         )
         parser.add_argument(
             "--commercial-marker",
-            default=env.get("OTRADIO_COMMERCIAL_MARKER") or DEFAULT_COMMERCIAL_MARKER,
             help="Filenames containing this word are treated as commercials.",
         )
         parser.add_argument(
             "--no-speech",
             dest="speech_enabled",
             action="store_false",
-            default=_env_bool(env.get("OTRADIO_SPEECH"), True),
             help="Do not announce anything through the speech synthesiser.",
         )
         parser.add_argument(
@@ -86,6 +81,34 @@ class Config:
             action="store_true",
             help="Run the loop with silent audio and speech. For testing off-device.",
         )
+
+        # Environment-derived defaults are computed after the parser exists so a
+        # malformed value can be reported through parser.error() -- the same
+        # SystemExit(2)-plus-usage-message path argparse uses for a bad flag,
+        # rather than letting a raw ValueError escape.
+        env_defaults = {
+            "library": Path(env.get("OTRADIO_LIBRARY") or DEFAULT_LIBRARY_DIR),
+            "commercial_marker": env.get("OTRADIO_COMMERCIAL_MARKER")
+            or DEFAULT_COMMERCIAL_MARKER,
+            "speech_enabled": _env_bool(env.get("OTRADIO_SPEECH"), True),
+        }
+        try:
+            env_defaults["volume"] = float(env.get("OTRADIO_VOLUME") or 1.0)
+        except ValueError:
+            parser.error(
+                f"OTRADIO_VOLUME: invalid float value: {env['OTRADIO_VOLUME']!r}"
+            )
+        try:
+            env_defaults["max_play_seconds"] = _optional_int(
+                env.get("OTRADIO_MAX_PLAY_SECONDS")
+            )
+        except ValueError:
+            parser.error(
+                "OTRADIO_MAX_PLAY_SECONDS: invalid int value: "
+                f"{env['OTRADIO_MAX_PLAY_SECONDS']!r}"
+            )
+        parser.set_defaults(**env_defaults)
+
         args = parser.parse_args(argv)
 
         return cls(
