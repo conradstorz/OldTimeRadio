@@ -39,7 +39,11 @@ class NullSpeaker:
 
 
 def _run(command: list[str]) -> None:
-    subprocess.run(command, check=False, capture_output=True)
+    result = subprocess.run(command, check=False, capture_output=True)
+    if result.returncode != 0:
+        logger.debug(
+            "%s exited with code %d", command[0], result.returncode
+        )
 
 
 class EspeakSpeaker:
@@ -69,6 +73,7 @@ class EspeakSpeaker:
             "-v", self._voice,
             "-a", str(self._amplitude),
             "-s", str(self._speed),
+            "--",
             text,
         ]
         try:
