@@ -184,3 +184,65 @@ def test_json_store_inherits_snapshot_isolation(tmp_path):
     snapshot = store.stats_for("gunsmoke.mp3")
     snapshot.num_of_plays = 999
     assert store.stats_for("gunsmoke.mp3").num_of_plays == 1
+
+
+def test_json_store_quarantines_unparseable_json(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text("{not json", encoding="utf-8")
+
+    store = make_json_store(tmp_path)
+
+    assert store.stats_for("gunsmoke.mp3") == PlayStats()
+    assert not stats_path.exists()
+    bad = tmp_path / "otradio-stats.json.bad"
+    assert bad.read_text(encoding="utf-8") == "{not json"
+
+
+def test_json_store_quarantines_wrong_shape(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+    make_json_store(tmp_path)
+    assert not stats_path.exists()
+    assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_quarantines_unknown_version(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(
+        json.dumps({"version": 999, "recordings": {}}), encoding="utf-8"
+    )
+    make_json_store(tmp_path)
+    assert not stats_path.exists()
+    assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_quarantines_malformed_entry(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(
+        json.dumps({"version": 1, "recordings": {"a.mp3": {"num_of_plays": 1}}}),
+        encoding="utf-8",
+    )
+    store = make_json_store(tmp_path)
+    assert store.stats_for("a.mp3") == PlayStats()
+    assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_quarantine_overwrites_a_previous_bad_file(tmp_path):
+    (tmp_path / "otradio-stats.json.bad").write_text("older garbage", encoding="utf-8")
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text("newer garbage", encoding="utf-8")
+    make_json_store(tmp_path)
+    bad = tmp_path / "otradio-stats.json.bad"
+    assert bad.read_text(encoding="utf-8") == "newer garbage"
+
+
+def test_json_store_recovers_after_quarantine(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text("garbage", encoding="utf-8")
+    store = make_json_store(tmp_path)
+
+    store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
+
+    reloaded = make_json_store(tmp_path)
+    assert reloaded.stats_for("gunsmoke.mp3").num_of_plays == 1
+    assert (tmp_path / "otradio-stats.json.bad").exists()
