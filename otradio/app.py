@@ -112,29 +112,37 @@ class Radio:
     def _handle_command(self, recording: Recording, started: float) -> bool:
         """Act on pending listener commands. True if playback was stopped.
 
-        A burst of queued CYCLE_ERA commands (e.g. a key held down) is
-        drained to exhaustion once triggered, rather than producing one
-        one-tick show per queued command: all of them are applied as a
-        single jump, with exactly one interruption recorded, one stop, and
-        one announcement of the final era.
+        A burst of queued commands (e.g. a key held down) is drained to
+        exhaustion once triggered and coalesced: every CYCLE_ERA step is
+        applied, a SKIP forces a show next, and exactly one interruption
+        is recorded, one stop issued, and at most one announcement spoken
+        (only when the era changed — a pure skip is silent).
         """
         command = self._controls.poll()
-        if command is not Command.CYCLE_ERA:
+        if command is None:
             return False
-        cycles = 1
-        for _ in range(100):  # bound the drain against a stuck key
-            if self._controls.poll() is not Command.CYCLE_ERA:
+        cycles = 0
+        skip = False
+        for _ in range(101):  # bound the drain against a stuck key
+            if command is Command.CYCLE_ERA:
+                cycles += 1
+            elif command is Command.SKIP:
+                skip = True
+            command = self._controls.poll()
+            if command is None:
                 break
-            cycles += 1
         era = None
         for _ in range(cycles):
             era = self._scheduler.cycle_era()
+        if skip:
+            self._scheduler.force_show_next()
         seconds_played = int(self._monotonic() - started)
         self._store.record_interruption(recording.id, self._now(), seconds_played)
         self._player.stop()
-        announcement = "playing all eras" if era is None else f"playing the {era}s"
-        logger.info("%s", announcement)
-        self._speaker.say(announcement)
+        if cycles:
+            announcement = "playing all eras" if era is None else f"playing the {era}s"
+            logger.info("%s", announcement)
+            self._speaker.say(announcement)
         return True
 
 

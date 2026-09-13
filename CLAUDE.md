@@ -56,8 +56,7 @@ persists play history to `otradio-stats.json` in the library directory,
 flushing on every record because the appliance is powered off at the wall.
 The follow-on work, in order: genre filtering beyond show/commercial (needs
 genre metadata in the library first), a GPIO `Controls` implementation for
-the cabinet hardware, a skip control that records an `Interruption`, and
-`load_datetime()` (NTP → RTC → system clock).
+the cabinet hardware, and `load_datetime()` (NTP → RTC → system clock).
 See `docs/superpowers/specs/2026-09-02-otradio-refactor-design.md`.
 
 Speech is an open item: `EspeakSpeaker` shells out to `espeak-ng` because the

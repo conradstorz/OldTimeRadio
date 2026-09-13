@@ -532,3 +532,53 @@ def test_build_radio_falls_back_to_all_eras_when_the_decade_is_absent(tmp_path):
     )
     radio = build_radio(config)
     assert radio._scheduler.era is None
+
+
+# -- skip command ----------------------------------------------------------
+
+
+def test_skip_stops_the_show_silently_and_a_show_plays_next():
+    radio, player, speaker, store, _scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert speaker.said == [GREETING]  # a skip is silent
+    skipped = player.played[0].name
+    interruptions = store.stats_for(skipped).interruptions
+    assert len(interruptions) == 1
+    assert interruptions[0].seconds_played == 1
+    # The pick after a skipped show is another show, not the commercial the
+    # alternation would have chosen.
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+
+
+def test_skip_during_a_commercial_forces_a_show_next():
+    radio, player, _speaker, _store, scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    commercial = Recording(
+        id="commercial-a.mp3",
+        filename="commercial-a.mp3",
+        path=Path("commercial-a.mp3"),
+        release_date=None,
+        genre=Genre.COMMERCIAL,
+    )
+    stopped = radio._handle_command(commercial, started=0.0)
+    assert stopped is True
+    assert player.stopped == 1
+    assert scheduler.next().genre is Genre.SHOW
+
+
+def test_mixed_skip_and_cycle_burst_coalesces_into_one_stop():
+    radio, player, speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP, Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert scheduler.era == 1940
+    assert "playing the 1940s" in speaker.said
+    skipped = player.played[0].name
+    assert len(store.stats_for(skipped).interruptions) == 1
+    # Era 1940 plus the forced show means the next pick is forties.mp3.
+    assert player.played[1].name == "forties.mp3"
