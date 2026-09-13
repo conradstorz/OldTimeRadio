@@ -180,6 +180,7 @@ class JsonMetadataStore(InMemoryStore):
         super().__init__()
         self._path = path
         self._write_warned = False
+        self._readonly = False
         self._load()
 
     def record_played(self, recording_id: str, when: datetime) -> None:
@@ -206,7 +207,13 @@ class JsonMetadataStore(InMemoryStore):
         except FileNotFoundError:
             return
         except OSError:
-            self._quarantine()
+            if not self._quarantine():
+                self._readonly = True
+                logger.warning(
+                    "%s could not be read or set aside; play history will not "
+                    "be saved this run to avoid overwriting it.",
+                    self._path,
+                )
             return
         try:
             data = json.loads(raw)
@@ -228,6 +235,15 @@ class JsonMetadataStore(InMemoryStore):
             self._quarantine()
 
     def _flush(self) -> None:
+        if self._readonly:
+            if not self._write_warned:
+                logger.warning(
+                    "%s is read-only for this run (it could not be read or "
+                    "set aside earlier); play history will not be saved.",
+                    self._path,
+                )
+                self._write_warned = True
+            return
         payload = {
             "version": STATS_VERSION,
             "recordings": {
@@ -253,10 +269,15 @@ class JsonMetadataStore(InMemoryStore):
                 )
                 self._write_warned = True
 
-    def _quarantine(self) -> None:
-        """Set aside an unreadable stats file as `<path>.bad` and carry on."""
+    def _quarantine(self) -> bool:
+        """Set aside an unreadable stats file as `<path>.bad` and carry on.
+
+        Returns True on success, False if the file could not be moved (it is
+        left in place at self._path).
+        """
         try:
             os.replace(self._path, self._path.with_name(self._path.name + ".bad"))
+            return True
         except OSError as exc:
             logger.warning(
                 "Could not set aside %s as %s.bad: %s",
@@ -264,3 +285,4 @@ class JsonMetadataStore(InMemoryStore):
                 self._path,
                 exc,
             )
+            return False

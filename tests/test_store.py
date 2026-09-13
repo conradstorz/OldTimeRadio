@@ -1,5 +1,7 @@
 import json
+import os
 from datetime import datetime
+from pathlib import Path
 
 from otradio.store import InMemoryStore, Interruption, JsonMetadataStore, PlayStats
 
@@ -254,6 +256,24 @@ def test_json_store_survives_an_unwritable_path(tmp_path):
     store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
     assert store.stats_for("gunsmoke.mp3").num_of_plays == 1
     store.save()
+
+
+def test_json_store_goes_readonly_when_file_unreadable_and_unquarantinable(
+    tmp_path, monkeypatch
+):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text("precious history", encoding="utf-8")
+    monkeypatch.setattr(
+        Path, "read_text", lambda self, **kw: (_ for _ in ()).throw(PermissionError())
+    )
+    monkeypatch.setattr(os, "replace", lambda src, dst: (_ for _ in ()).throw(PermissionError()))
+    store = JsonMetadataStore(stats_path)
+    monkeypatch.undo()
+
+    store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
+    store.save()
+
+    assert stats_path.read_text(encoding="utf-8") == "precious history"
 
 
 def test_json_store_quarantines_wrong_typed_num_of_plays(tmp_path):

@@ -71,6 +71,10 @@ show (~every 30 minutes) — negligible for SD-card wear.
   malformed entries): rename the file to `<path>.bad` via `os.replace` (overwriting any prior
   `.bad`) and start with empty history. The radio always boots; the evidence is kept for
   inspection.
+- File exists but can neither be read nor quarantined (e.g. read-only filesystem mid-fault):
+  the store goes read-only for the rest of the run — every `_flush()` is a logged no-op (once)
+  and `self._path` is never touched — so the possibly-good file already on disk is never
+  clobbered by a near-empty in-memory state.
 
 ### Wiring
 
