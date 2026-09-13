@@ -39,3 +39,8 @@ def parse_release_date(filename: str) -> date | None:
         # dateutil resolves two-digit years into the 21st century.
         parsed = parsed.replace(year=parsed.year - 100)
     return parsed.date()
+
+
+def decade_of(d: date) -> int:
+    """Return the decade a date falls in, as its starting year (1947 -> 1940)."""
+    return d.year - d.year % 10

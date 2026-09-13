@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 
 from otradio.config import DEFAULT_COMMERCIAL_MARKER
-from otradio.dates import parse_release_date
+from otradio.dates import decade_of, parse_release_date
 
 AUDIO_EXTENSIONS = frozenset(
     {".mp3", ".ogg", ".wav", ".m4a", ".aac", ".aif", ".aiff", ".flac", ".wma", ".mid"}
@@ -50,6 +50,16 @@ class Catalog:
         self._commercials = tuple(
             r for r in self._recordings if r.genre is Genre.COMMERCIAL
         )
+        by_decade: dict[int, list[Recording]] = {}
+        for recording in self._shows:
+            if recording.release_date is not None:
+                by_decade.setdefault(
+                    decade_of(recording.release_date), []
+                ).append(recording)
+        self._shows_by_decade = {
+            decade: tuple(recordings)
+            for decade, recordings in sorted(by_decade.items())
+        }
 
     @classmethod
     def from_directory(
@@ -90,6 +100,17 @@ class Catalog:
     @property
     def commercials(self) -> tuple[Recording, ...]:
         return self._commercials
+
+    @property
+    def decades(self) -> tuple[int, ...]:
+        """Decades with at least one dated show, ascending."""
+        return tuple(self._shows_by_decade)
+
+    def shows_for(self, era: int | None) -> tuple[Recording, ...]:
+        """Shows for an era: a decade start year, or None for all shows."""
+        if era is None:
+            return self._shows
+        return self._shows_by_decade.get(era, ())
 
     def get(self, recording_id: str) -> Recording | None:
         return self._by_id.get(recording_id)
