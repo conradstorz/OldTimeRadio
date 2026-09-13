@@ -39,8 +39,8 @@ nothing there.
 | `--commercial-marker` | `OTRADIO_COMMERCIAL_MARKER` | `commercial` |
 | `--no-speech` | `OTRADIO_SPEECH` | speech on |
 | `--dry-run` | — | off |
-| `--era 1940` | — | `all` |
-| `--controls keyboard\|none` | — | `none` |
+| `--era 1940` | `OTRADIO_ERA` | `all` |
+| `--controls keyboard\|none` | `OTRADIO_CONTROLS` | `none` |
 
 Recordings whose filename contains the commercial marker are treated as
 commercials and interleaved between shows. Broadcast dates are read from the
