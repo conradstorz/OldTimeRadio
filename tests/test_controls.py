@@ -1,4 +1,5 @@
 import io
+import logging
 import threading
 
 from otradio.controls import Command, KeyboardControls, NullControls
@@ -54,3 +55,31 @@ def test_keyboard_controls_poll_maps_queued_lines_without_a_live_thread():
     assert controls.poll() is None
     assert controls.poll() is Command.CYCLE_ERA
     assert controls.poll() is None
+
+
+def test_keyboard_controls_queue_is_bounded_against_a_stuck_key():
+    """A stuck key spamming lines must not grow the queue without bound."""
+    controls = KeyboardControls(stream=io.StringIO("e\n" * 200))
+    first = controls.poll()  # starts the reader thread
+    controls._reader.join(5)
+    assert controls._reader.is_alive() is False
+    count = 1 if first is not None else 0
+    while True:
+        command = controls.poll()
+        if command is None:
+            break
+        count += 1
+    assert count <= 64
+
+
+def test_keyboard_controls_reader_thread_death_is_logged_not_raised(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr("otradio.controls.sys.stdin", None)
+    controls = KeyboardControls(stream=None)
+    with caplog.at_level(logging.WARNING):
+        assert controls.poll() is None
+        controls._reader.join(5)
+    assert controls._reader.is_alive() is False
+    assert controls.poll() is None
+    assert "Keyboard controls stopped reading input" in caplog.text

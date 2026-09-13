@@ -370,12 +370,13 @@ class BusyPlayer:
         self._busy_polls = busy_polls
         self.stopped = 0
         self.closed = False
+        self.played = []
 
     def start(self):
         pass
 
     def play(self, path):
-        pass
+        self.played.append(path)
 
     def stop(self):
         self.stopped += 1
@@ -448,7 +449,7 @@ def test_cycle_era_command_stops_the_show_and_records_an_interruption():
     )
     interruptions = store.stats_for(played_id).interruptions
     assert len(interruptions) == 1
-    assert interruptions[0].seconds_played >= 0
+    assert interruptions[0].seconds_played == 1
     assert scheduler.era == 1940  # None -> first decade
 
 
@@ -473,7 +474,29 @@ def test_null_controls_change_nothing():
     radio.run(max_iterations=1)
     assert player.stopped == 0
     assert scheduler.era is None
-    assert all("playing" not in said or said == GREETING for said in speaker.said)
+    assert speaker.said == [GREETING]
+
+
+def test_cycle_era_command_burst_coalesces_into_one_stop_and_announcement():
+    """A burst of queued CYCLE_ERA commands must not produce one one-tick
+    show per command: they are drained and applied as a single jump."""
+    radio, player, speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA, Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=1)
+    assert player.stopped == 1
+    assert scheduler.era == 1950
+    assert speaker.said == [GREETING, "playing the 1950s"]
+
+
+def test_cycle_era_end_to_end_third_pick_is_the_new_eras_show():
+    radio, player, _speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=3)
+    assert scheduler.era == 1940
+    assert [p.name for p in player.played][2] == "forties.mp3"
+    assert store.stats_for("forties.mp3").num_of_plays >= 1
 
 
 # -- build_radio controls/era wiring -------------------------------------

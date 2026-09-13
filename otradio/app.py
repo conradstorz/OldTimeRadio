@@ -89,8 +89,8 @@ class Radio:
         off after roughly five minutes.
         """
         limit = self._config.max_play_seconds
-        deadline = None if limit is None else self._monotonic() + limit
         started = self._monotonic()
+        deadline = None if limit is None else started + limit
 
         # At least one poll interval is spent per recording even if the
         # player is never busy (an instantly-finished or unplayable file),
@@ -110,11 +110,25 @@ class Radio:
             self._sleep(POLL_INTERVAL_SECONDS)
 
     def _handle_command(self, recording: Recording, started: float) -> bool:
-        """Act on one pending listener command. True if playback was stopped."""
+        """Act on pending listener commands. True if playback was stopped.
+
+        A burst of queued CYCLE_ERA commands (e.g. a key held down) is
+        drained to exhaustion once triggered, rather than producing one
+        one-tick show per queued command: all of them are applied as a
+        single jump, with exactly one interruption recorded, one stop, and
+        one announcement of the final era.
+        """
         command = self._controls.poll()
         if command is not Command.CYCLE_ERA:
             return False
-        era = self._scheduler.cycle_era()
+        cycles = 1
+        for _ in range(100):  # bound the drain against a stuck key
+            if self._controls.poll() is not Command.CYCLE_ERA:
+                break
+            cycles += 1
+        era = None
+        for _ in range(cycles):
+            era = self._scheduler.cycle_era()
         seconds_played = int(self._monotonic() - started)
         self._store.record_interruption(recording.id, self._now(), seconds_played)
         self._player.stop()

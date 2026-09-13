@@ -104,7 +104,7 @@ class Catalog:
     @property
     def decades(self) -> tuple[int, ...]:
         """Decades with at least one dated show, ascending."""
-        return tuple(self._shows_by_decade)
+        return tuple(sorted(self._shows_by_decade))
 
     def shows_for(self, era: int | None) -> tuple[Recording, ...]:
         """Shows for an era: a decade start year, or None for all shows."""

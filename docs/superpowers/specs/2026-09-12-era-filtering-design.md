@@ -52,6 +52,12 @@ New module `otradio/controls.py`, mirroring the `Player`/`Speaker` adapter patte
   drains one entry. The line `e` (case-insensitive, stripped) maps to `CYCLE_ERA`;
   anything else is ignored. The thread starts lazily on first `poll()`, not in
   `__init__`, so construction does no I/O. Testable by injecting into the queue.
+  The queue is bounded (`maxsize=64`); a stuck key spamming lines drops the
+  overflow (`put_nowait` / `queue.Full`) rather than growing memory without
+  bound. If the reader thread's iteration fails (e.g. no stdin is attached, as
+  under a systemd unit), the failure is caught, logged as a warning, and the
+  thread exits; the control then goes inert — `poll()` keeps returning `None`
+  — but the radio keeps playing.
 - A future `GpioControls` is one new class behind the same protocol.
 - Selection: `--controls keyboard|none` / `OTRADIO_CONTROLS`, default `none` (the Pi
   boot service has no useful stdin).
@@ -75,10 +81,19 @@ New module `otradio/controls.py`, mirroring the `Player`/`Speaker` adapter patte
 - `_wait_for_end` polls `controls.poll()` once per existing 1-second tick. On
   `CYCLE_ERA`:
   1. `new_era = scheduler.cycle_era()`
-  2. announce through the speaker: `"playing all eras"` or `"playing the 1940s"`
-  3. `store.record_interruption(recording.id, now(), seconds_played)` — elapsed
+  2. `store.record_interruption(recording.id, now(), seconds_played)` — elapsed
      playback measured with `monotonic()` from when the show started
-  4. `player.stop()` and return; the next pick comes from the new era.
+  3. `player.stop()`
+  4. announce through the speaker: `"playing all eras"` or `"playing the 1940s"`
+     — stopping before announcing, not after, so the announcement never talks
+     over the show on the shared audio device
+  5. return; the next pick comes from the new era.
+- A burst of queued commands (e.g. a key held down, or several turns of the
+  future dial arriving before the next tick) is drained to exhaustion once a
+  `CYCLE_ERA` is seen, rather than producing one one-tick show per queued
+  command: all of them are coalesced into a single jump, applying every
+  `cycle_era()` step, with exactly one interruption recorded, one stop, and
+  one announcement of the final era.
 - The poll between recordings costs nothing extra: the loop already ticks every
   `POLL_INTERVAL_SECONDS`.
 

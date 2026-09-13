@@ -5,11 +5,14 @@ input hardware (dial or buttons on GPIO) becomes another class behind the
 same protocol when it is chosen.
 """
 
+import logging
 import queue
 import sys
 import threading
 from enum import Enum
 from typing import IO, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class Command(Enum):
@@ -19,7 +22,7 @@ class Command(Enum):
 class Controls(Protocol):
     """A source of listener commands, polled by the run loop."""
 
-    def poll(self) -> "Command | None":
+    def poll(self) -> Command | None:
         """Return one pending command, or None. Never blocks."""
         ...
 
@@ -41,7 +44,7 @@ class KeyboardControls:
 
     def __init__(self, stream: IO[str] | None = None) -> None:
         self._stream = stream
-        self._queue: queue.Queue[str] = queue.Queue()
+        self._queue: queue.Queue[str] = queue.Queue(maxsize=64)
         self._reader: threading.Thread | None = None
 
     def poll(self) -> Command | None:
@@ -58,5 +61,13 @@ class KeyboardControls:
 
     def _read_lines(self) -> None:
         stream = self._stream if self._stream is not None else sys.stdin
-        for line in stream:
-            self._queue.put(line)
+        try:
+            if stream is None:  # e.g. a systemd unit with no stdin attached
+                raise OSError("no stdin is attached")
+            for line in stream:
+                try:
+                    self._queue.put_nowait(line)
+                except queue.Full:
+                    pass  # a stuck key must not grow memory without bound
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning("Keyboard controls stopped reading input: %s", exc)
