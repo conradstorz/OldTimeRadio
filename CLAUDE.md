@@ -36,6 +36,7 @@ import time.
 | `audio.py` | `Player` protocol; `PygamePlayer` (lazy pygame import) and `NullPlayer` |
 | `speech.py` | `Speaker` protocol; `EspeakSpeaker` (subprocess) and `NullSpeaker` |
 | `scheduler.py` | `AlternatingScheduler` — what plays next |
+| `controls.py` | `Controls` protocol; `NullControls` and `KeyboardControls` (stdin) |
 | `app.py` | `Radio` run loop, `build_radio()`, `main()` |
 
 `pygame` must stay inside `PygamePlayer.start()`. Importing it at module level
@@ -53,8 +54,10 @@ nothing in the tested path reads audio data.
 `InMemoryStore.save()` is a no-op; normal runs use `JsonMetadataStore`, which
 persists play history to `otradio-stats.json` in the library directory,
 flushing on every record because the appliance is powered off at the wall.
-The follow-on work, in order: era/genre filtering, a skip control that
-records an `Interruption`, and `load_datetime()` (NTP → RTC → system clock).
+The follow-on work, in order: genre filtering beyond show/commercial (needs
+genre metadata in the library first), a GPIO `Controls` implementation for
+the cabinet hardware, a skip control that records an `Interruption`, and
+`load_datetime()` (NTP → RTC → system clock).
 See `docs/superpowers/specs/2026-09-02-otradio-refactor-design.md`.
 
 Speech is an open item: `EspeakSpeaker` shells out to `espeak-ng` because the
