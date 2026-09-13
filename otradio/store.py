@@ -7,11 +7,14 @@ powered off at the wall rather than shut down cleanly.
 """
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,7 @@ class InMemoryStore:
         stats.interruptions.append(Interruption(at=when, seconds_played=seconds_played))
 
     def save(self) -> None:
-        """No-op. Nothing is persisted yet."""
+        """No-op by design: this store keeps history for one run only."""
 
 
 STATS_VERSION = 1
@@ -119,22 +122,46 @@ def _stats_to_json(stats: PlayStats) -> dict:
     }
 
 
+def _require_int(value: object, field_name: str) -> int:
+    # bool is a subclass of int; reject it explicitly so True/False never
+    # silently pass as a play count or a duration.
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be an int, got {value!r}")
+    return value
+
+
 def _stats_from_json(entry: dict) -> PlayStats:
+    num_of_plays = _require_int(entry["num_of_plays"], "num_of_plays")
+
+    available = entry["available"]
+    if available is not None and not isinstance(available, bool):
+        raise ValueError(f"available must be a bool or None, got {available!r}")
+
+    unavailable_at = entry["unavailable_at"]
+    if not isinstance(unavailable_at, list):
+        raise ValueError(f"unavailable_at must be a list, got {unavailable_at!r}")
+
+    interruptions = entry["interruptions"]
+    if not isinstance(interruptions, list):
+        raise ValueError(f"interruptions must be a list, got {interruptions!r}")
+
     return PlayStats(
-        num_of_plays=entry["num_of_plays"],
+        num_of_plays=num_of_plays,
         last_played=(
             datetime.fromisoformat(entry["last_played"])
             if entry["last_played"] is not None
             else None
         ),
-        available=entry["available"],
-        unavailable_at=[datetime.fromisoformat(t) for t in entry["unavailable_at"]],
+        available=available,
+        unavailable_at=[datetime.fromisoformat(t) for t in unavailable_at],
         interruptions=[
             Interruption(
                 at=datetime.fromisoformat(event["at"]),
-                seconds_played=event["seconds_played"],
+                seconds_played=_require_int(
+                    event["seconds_played"], "seconds_played"
+                ),
             )
-            for event in entry["interruptions"]
+            for event in interruptions
         ],
     )
 
@@ -152,6 +179,7 @@ class JsonMetadataStore(InMemoryStore):
     def __init__(self, path: Path) -> None:
         super().__init__()
         self._path = path
+        self._write_warned = False
         self._load()
 
     def record_played(self, recording_id: str, when: datetime) -> None:
@@ -188,7 +216,14 @@ class JsonMetadataStore(InMemoryStore):
                 recording_id: _stats_from_json(entry)
                 for recording_id, entry in data["recordings"].items()
             }
-        except (ValueError, KeyError, TypeError, AttributeError):
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            logger.warning(
+                "%s is not a valid stats file (%s); discarding its history and "
+                "setting it aside as %s.bad",
+                self._path,
+                exc,
+                self._path,
+            )
             self._stats = {}
             self._quarantine()
 
@@ -201,12 +236,31 @@ class JsonMetadataStore(InMemoryStore):
             },
         }
         tmp = self._path.with_name(self._path.name + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(tmp, self._path)
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self._path)
+        except OSError as exc:
+            # A stats file we cannot write must never stop the radio playing.
+            if not self._write_warned:
+                logger.warning(
+                    "Could not write %s: %s. Play history will not be saved "
+                    "until this is fixed.",
+                    self._path,
+                    exc,
+                )
+                self._write_warned = True
 
     def _quarantine(self) -> None:
         """Set aside an unreadable stats file as `<path>.bad` and carry on."""
         try:
             os.replace(self._path, self._path.with_name(self._path.name + ".bad"))
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.warning(
+                "Could not set aside %s as %s.bad: %s",
+                self._path,
+                self._path,
+                exc,
+            )

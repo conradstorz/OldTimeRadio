@@ -246,3 +246,36 @@ def test_json_store_recovers_after_quarantine(tmp_path):
     reloaded = make_json_store(tmp_path)
     assert reloaded.stats_for("gunsmoke.mp3").num_of_plays == 1
     assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_survives_an_unwritable_path(tmp_path):
+    """A read-only SD card must never stop the radio playing (F1)."""
+    store = JsonMetadataStore(tmp_path / "does-not-exist" / "otradio-stats.json")
+    store.record_played("gunsmoke.mp3", datetime(1952, 7, 26))
+    assert store.stats_for("gunsmoke.mp3").num_of_plays == 1
+    store.save()
+
+
+def test_json_store_quarantines_wrong_typed_num_of_plays(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "recordings": {
+                    "a.mp3": {
+                        "num_of_plays": "lots",
+                        "last_played": None,
+                        "available": None,
+                        "unavailable_at": [],
+                        "interruptions": [],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = make_json_store(tmp_path)
+    assert store.stats_for("a.mp3") == PlayStats()
+    assert not stats_path.exists()
+    assert (tmp_path / "otradio-stats.json.bad").exists()

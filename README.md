@@ -24,6 +24,11 @@ Spoken announcements need the `espeak-ng` command:
 
 Without it the radio still plays; it just stays quiet between shows.
 
+A normal run writes play history to `otradio-stats.json` (plus transient
+`.tmp` and, after a corrupt file is quarantined, `.bad` siblings) inside the
+`--library` directory. `--dry-run` keeps history in memory only and writes
+nothing there.
+
 ### Options
 
 | Flag | Environment variable | Default |
