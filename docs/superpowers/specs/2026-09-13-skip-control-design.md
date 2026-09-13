@@ -22,7 +22,9 @@ env var (skip rides the existing `--controls` selection); announcements for skip
 - No sample-until-match anywhere: the skip target comes from the existing
   pre-partitioned buckets.
 - After any skip — of a show or of a commercial — the next pick is a show. The
-  commercial-between-shows rhythm resumes on the pick after that.
+  commercial-between-shows rhythm resumes on the pick after that. (best-effort:
+  with no eligible shows, the scheduler's existing empty-bucket fallback keeps
+  playing commercials rather than stalling.)
 - Skips are silent: no speech, no era change. The next show starting is the feedback.
 - A skip records exactly one `Interruption` (`recording.id`, wall-clock now, elapsed
   seconds from the same monotonic base the watchdog uses), same as an era change.

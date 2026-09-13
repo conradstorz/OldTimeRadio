@@ -123,7 +123,7 @@ class Radio:
             return False
         cycles = 0
         skip = False
-        for _ in range(101):  # bound the drain against a stuck key
+        for _ in range(101):  # 101: the first command is already in hand; bound the drain against a stuck key
             if command is Command.CYCLE_ERA:
                 cycles += 1
             elif command is Command.SKIP:
@@ -131,6 +131,8 @@ class Radio:
             command = self._controls.poll()
             if command is None:
                 break
+        if not cycles and not skip:
+            return False
         era = None
         for _ in range(cycles):
             era = self._scheduler.cycle_era()

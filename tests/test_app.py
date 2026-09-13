@@ -553,8 +553,23 @@ def test_skip_stops_the_show_silently_and_a_show_plays_next():
     assert player.played[1].name in ("forties.mp3", "fifties.mp3")
 
 
-def test_skip_during_a_commercial_forces_a_show_next():
-    radio, player, _speaker, _store, scheduler = make_era_radio(
+def test_unknown_command_is_a_no_op():
+    from enum import Enum
+
+    class OtherCommand(Enum):
+        MYSTERY = "mystery"
+
+    radio, player, _speaker, store, _scheduler = make_era_radio(
+        ScriptedControls([OtherCommand.MYSTERY])
+    )
+    radio.run(max_iterations=1)
+    assert player.stopped == 0
+    played_id = player.played[0].name
+    assert len(store.stats_for(played_id).interruptions) == 0
+
+
+def test_skip_during_a_commercial_stops_it_and_records_an_interruption():
+    radio, player, _speaker, store, scheduler = make_era_radio(
         ScriptedControls([Command.SKIP])
     )
     commercial = Recording(
@@ -568,6 +583,27 @@ def test_skip_during_a_commercial_forces_a_show_next():
     assert stopped is True
     assert player.stopped == 1
     assert scheduler.next().genre is Genre.SHOW
+    assert len(store.stats_for("commercial-a.mp3").interruptions) == 1
+
+
+def test_reverse_burst_cycle_then_skip_coalesces_into_one_stop():
+    radio, player, speaker, _store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA, Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert scheduler.era == 1940
+    assert "playing the 1940s" in speaker.said
+    assert player.played[1].name == "forties.mp3"
+
+
+def test_skip_then_normal_rhythm_resumes_with_a_commercial():
+    radio, player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    radio.run(max_iterations=3)
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+    assert player.played[2].name == "commercial-a.mp3"
 
 
 def test_mixed_skip_and_cycle_burst_coalesces_into_one_stop():
