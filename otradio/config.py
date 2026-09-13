@@ -27,6 +27,15 @@ def _optional_int(value: str | int | None) -> int | None:
     return int(text) if text else None
 
 
+def _parse_era(value: str) -> int | None:
+    """A decade start year, or None for all eras. '1947' normalizes to 1940."""
+    text = value.strip().lower()
+    if text in ("", "all"):
+        return None
+    year = int(text)  # ValueError propagates to argparse / parser.error
+    return year - year % 10
+
+
 @dataclass(frozen=True)
 class Config:
     """Everything the radio needs to know before it starts."""
@@ -37,6 +46,8 @@ class Config:
     commercial_marker: str = DEFAULT_COMMERCIAL_MARKER
     speech_enabled: bool = True
     dry_run: bool = False
+    era: int | None = None
+    controls: str = "none"
 
     @classmethod
     def from_cli(
@@ -81,6 +92,16 @@ class Config:
             action="store_true",
             help="Run the loop with silent audio and speech. For testing off-device.",
         )
+        parser.add_argument(
+            "--era",
+            type=_parse_era,
+            help="Only play shows from this decade (e.g. 1940), or 'all'.",
+        )
+        parser.add_argument(
+            "--controls",
+            choices=("keyboard", "none"),
+            help="Where listener commands come from while playing.",
+        )
 
         # Environment-derived defaults are computed after the parser exists so a
         # malformed value can be reported through parser.error() -- the same
@@ -107,6 +128,16 @@ class Config:
                 "OTRADIO_MAX_PLAY_SECONDS: invalid int value: "
                 f"{env['OTRADIO_MAX_PLAY_SECONDS']!r}"
             )
+        controls_default = (env.get("OTRADIO_CONTROLS") or "none").strip().lower()
+        if controls_default not in ("keyboard", "none"):
+            parser.error(
+                f"OTRADIO_CONTROLS: invalid value: {env['OTRADIO_CONTROLS']!r}"
+            )
+        env_defaults["controls"] = controls_default
+        try:
+            env_defaults["era"] = _parse_era(env.get("OTRADIO_ERA") or "all")
+        except ValueError:
+            parser.error(f"OTRADIO_ERA: invalid era value: {env['OTRADIO_ERA']!r}")
         parser.set_defaults(**env_defaults)
 
         args = parser.parse_args(argv)
@@ -118,4 +149,6 @@ class Config:
             commercial_marker=args.commercial_marker,
             speech_enabled=args.speech_enabled,
             dry_run=args.dry_run,
+            era=args.era,
+            controls=args.controls,
         )
