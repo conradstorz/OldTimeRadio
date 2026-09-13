@@ -8,6 +8,7 @@ from datetime import datetime
 from otradio.audio import PlaybackError, Player, PygamePlayer, NullPlayer
 from otradio.catalog import Catalog, Recording
 from otradio.config import Config
+from otradio.controls import Command, Controls, KeyboardControls, NullControls
 from otradio.scheduler import AlternatingScheduler
 from otradio.speech import Speaker, make_speaker
 from otradio.store import InMemoryStore, JsonMetadataStore, MetadataStore
@@ -30,6 +31,7 @@ class Radio:
         player: Player,
         speaker: Speaker,
         store: MetadataStore,
+        controls: Controls | None = None,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = datetime.now,
         monotonic: Callable[[], float] = time.monotonic,
@@ -40,6 +42,7 @@ class Radio:
         self._player = player
         self._speaker = speaker
         self._store = store
+        self._controls = controls if controls is not None else NullControls()
         self._sleep = sleep
         self._now = now
         self._monotonic = monotonic
@@ -86,13 +89,16 @@ class Radio:
         off after roughly five minutes.
         """
         limit = self._config.max_play_seconds
-        deadline = None if limit is None else self._monotonic() + limit
+        started = self._monotonic()
+        deadline = None if limit is None else started + limit
 
         # At least one poll interval is spent per recording even if the
         # player is never busy (an instantly-finished or unplayable file),
         # so the outer loop can never spin faster than POLL_INTERVAL_SECONDS.
         self._sleep(POLL_INTERVAL_SECONDS)
         while self._player.is_busy():
+            if self._handle_command(recording, started):
+                return
             if deadline is not None and self._monotonic() >= deadline:
                 logger.warning(
                     "%s exceeded the %s second limit; stopping it.",
@@ -102,6 +108,34 @@ class Radio:
                 self._player.stop()
                 return
             self._sleep(POLL_INTERVAL_SECONDS)
+
+    def _handle_command(self, recording: Recording, started: float) -> bool:
+        """Act on pending listener commands. True if playback was stopped.
+
+        A burst of queued CYCLE_ERA commands (e.g. a key held down) is
+        drained to exhaustion once triggered, rather than producing one
+        one-tick show per queued command: all of them are applied as a
+        single jump, with exactly one interruption recorded, one stop, and
+        one announcement of the final era.
+        """
+        command = self._controls.poll()
+        if command is not Command.CYCLE_ERA:
+            return False
+        cycles = 1
+        for _ in range(100):  # bound the drain against a stuck key
+            if self._controls.poll() is not Command.CYCLE_ERA:
+                break
+            cycles += 1
+        era = None
+        for _ in range(cycles):
+            era = self._scheduler.cycle_era()
+        seconds_played = int(self._monotonic() - started)
+        self._store.record_interruption(recording.id, self._now(), seconds_played)
+        self._player.stop()
+        announcement = "playing all eras" if era is None else f"playing the {era}s"
+        logger.info("%s", announcement)
+        self._speaker.say(announcement)
+        return True
 
 
 def build_radio(config: Config) -> Radio:
@@ -124,13 +158,23 @@ def build_radio(config: Config) -> Radio:
         if config.dry_run
         else JsonMetadataStore(config.library_dir / STATS_FILENAME)
     )
+    era = config.era
+    if era is not None and era not in catalog.decades:
+        logger.warning(
+            "No shows from the %ss in the library; starting with all eras.", era
+        )
+        era = None
+    controls: Controls = (
+        KeyboardControls() if config.controls == "keyboard" else NullControls()
+    )
     return Radio(
         config=config,
         catalog=catalog,
-        scheduler=AlternatingScheduler(catalog),
+        scheduler=AlternatingScheduler(catalog, era=era),
         player=player,
         speaker=make_speaker(config),
         store=store,
+        controls=controls,
     )
 
 

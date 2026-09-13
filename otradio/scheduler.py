@@ -20,14 +20,31 @@ class AlternatingScheduler:
     recording can never hang the radio.
     """
 
-    def __init__(self, catalog: Catalog, rng: random.Random | None = None) -> None:
+    def __init__(
+        self,
+        catalog: Catalog,
+        rng: random.Random | None = None,
+        era: int | None = None,
+    ) -> None:
         self._catalog = catalog
         self._rng = rng if rng is not None else random.Random()
+        self._era = era
         self._want_commercial = False
         self._warned_about_missing: set[str] = set()
 
+    @property
+    def era(self) -> int | None:
+        return self._era
+
+    def cycle_era(self) -> int | None:
+        """Advance the era: all -> oldest decade -> ... -> newest -> all."""
+        cycle: list[int | None] = [None, *self._catalog.decades]
+        position = cycle.index(self._era) if self._era in cycle else 0
+        self._era = cycle[(position + 1) % len(cycle)]
+        return self._era
+
     def next(self) -> Recording:
-        shows = self._catalog.shows
+        shows = self._catalog.shows_for(self._era)
         commercials = self._catalog.commercials
         if not shows and not commercials:
             raise EmptyLibrary("The recordings library contains nothing playable.")

@@ -105,3 +105,55 @@ def test_empty_library_produces_empty_catalog(tmp_path):
     assert len(catalog) == 0
     assert catalog.shows == ()
     assert catalog.commercials == ()
+
+
+def make_recording(name, genre, release_date=None):
+    return Recording(
+        id=name,
+        filename=name,
+        path=Path(name),
+        release_date=release_date,
+        genre=genre,
+    )
+
+
+def test_decades_lists_the_dated_show_decades_sorted_and_deduplicated():
+    catalog = Catalog(
+        [
+            make_recording("b.mp3", Genre.SHOW, date(1952, 1, 1)),
+            make_recording("a.mp3", Genre.SHOW, date(1947, 1, 1)),
+            make_recording("c.mp3", Genre.SHOW, date(1943, 1, 1)),
+            make_recording("undated.mp3", Genre.SHOW),
+        ]
+    )
+    assert catalog.decades == (1940, 1950)
+
+
+def test_shows_for_none_returns_every_show_including_dateless():
+    dated = make_recording("dated.mp3", Genre.SHOW, date(1947, 1, 1))
+    undated = make_recording("undated.mp3", Genre.SHOW)
+    catalog = Catalog([dated, undated])
+    assert catalog.shows_for(None) == (dated, undated)
+
+
+def test_shows_for_a_decade_returns_only_shows_dated_in_it():
+    forties = make_recording("forties.mp3", Genre.SHOW, date(1947, 1, 1))
+    fifties = make_recording("fifties.mp3", Genre.SHOW, date(1952, 1, 1))
+    undated = make_recording("undated.mp3", Genre.SHOW)
+    catalog = Catalog([forties, fifties, undated])
+    assert catalog.shows_for(1940) == (forties,)
+    assert catalog.shows_for(1950) == (fifties,)
+
+
+def test_shows_for_an_absent_decade_returns_empty():
+    catalog = Catalog([make_recording("a.mp3", Genre.SHOW, date(1947, 1, 1))])
+    assert catalog.shows_for(1930) == ()
+
+
+def test_shows_for_never_returns_commercials_even_dated_ones():
+    commercial = make_recording("commercial.mp3", Genre.COMMERCIAL, date(1947, 1, 1))
+    show = make_recording("show.mp3", Genre.SHOW, date(1947, 1, 1))
+    catalog = Catalog([commercial, show])
+    assert catalog.shows_for(None) == (show,)
+    assert catalog.shows_for(1940) == (show,)
+    assert catalog.decades == (1940,)

@@ -82,3 +82,74 @@ def test_draws_only_from_the_catalog():
     ids = {r.id for r in catalog.all}
     for _ in range(10):
         assert scheduler.next().id in ids
+
+
+def dated_show(name, year):
+    return Recording(
+        id=name,
+        filename=name,
+        path=Path(name),
+        release_date=date(year, 1, 1),
+        genre=Genre.SHOW,
+    )
+
+
+def commercial(name="commercial.mp3"):
+    return Recording(
+        id=name,
+        filename=name,
+        path=Path(name),
+        release_date=None,
+        genre=Genre.COMMERCIAL,
+    )
+
+
+def test_scheduler_with_an_era_picks_shows_only_from_that_decade():
+    catalog = Catalog(
+        [dated_show("forties.mp3", 1947), dated_show("fifties.mp3", 1952), commercial()]
+    )
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0), era=1950)
+    picks = [scheduler.next() for _ in range(10)]
+    show_ids = {r.id for r in picks if r.genre is Genre.SHOW}
+    assert show_ids == {"fifties.mp3"}
+    assert any(r.genre is Genre.COMMERCIAL for r in picks)
+
+
+def test_scheduler_era_defaults_to_all():
+    catalog = Catalog(
+        [dated_show("forties.mp3", 1947), dated_show("fifties.mp3", 1952), commercial()]
+    )
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0))
+    assert scheduler.era is None
+    picks = {r.id for r in (scheduler.next() for _ in range(20)) if r.genre is Genre.SHOW}
+    assert picks == {"forties.mp3", "fifties.mp3"}
+
+
+def test_cycle_era_walks_all_then_decades_ascending_then_all():
+    catalog = Catalog(
+        [dated_show("thirties.mp3", 1935), dated_show("fifties.mp3", 1952), commercial()]
+    )
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0))
+    assert scheduler.cycle_era() == 1930
+    assert scheduler.cycle_era() == 1950
+    assert scheduler.cycle_era() is None
+    assert scheduler.cycle_era() == 1930
+
+
+def test_cycle_era_from_an_era_not_in_the_cycle_goes_to_the_first_decade():
+    catalog = Catalog([dated_show("fifties.mp3", 1952), commercial()])
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0), era=1930)
+    assert scheduler.cycle_era() == 1950
+
+
+def test_cycle_era_with_no_dated_shows_stays_on_all():
+    undated = Recording(
+        id="undated.mp3",
+        filename="undated.mp3",
+        path=Path("undated.mp3"),
+        release_date=None,
+        genre=Genre.SHOW,
+    )
+    scheduler = AlternatingScheduler(Catalog([undated, commercial()]), rng=random.Random(0))
+    assert scheduler.cycle_era() is None
+    assert scheduler.cycle_era() is None

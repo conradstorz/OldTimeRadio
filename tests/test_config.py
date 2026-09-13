@@ -121,3 +121,64 @@ def test_config_is_immutable():
     config = Config.from_cli([], env={})
     with pytest.raises(FrozenInstanceError):
         config.volume = 0.5
+
+
+def test_era_defaults_to_all():
+    config = Config.from_cli([], env={})
+    assert config.era is None
+
+
+def test_era_flag_parses_a_decade():
+    config = Config.from_cli(["--era", "1940"], env={})
+    assert config.era == 1940
+
+
+def test_era_flag_normalizes_a_mid_decade_year():
+    config = Config.from_cli(["--era", "1947"], env={})
+    assert config.era == 1940
+
+
+def test_era_flag_accepts_all():
+    config = Config.from_cli(["--era", "all"], env={})
+    assert config.era is None
+
+
+def test_era_env_var_is_used_and_flag_wins():
+    assert Config.from_cli([], env={"OTRADIO_ERA": "1950"}).era == 1950
+    config = Config.from_cli(["--era", "all"], env={"OTRADIO_ERA": "1950"})
+    assert config.era is None
+
+
+def test_malformed_era_flag_exits_with_usage_error():
+    with pytest.raises(SystemExit) as excinfo:
+        Config.from_cli(["--era", "forties"], env={})
+    assert excinfo.value.code == 2
+
+
+def test_malformed_era_env_var_exits_with_usage_error():
+    with pytest.raises(SystemExit) as excinfo:
+        Config.from_cli([], env={"OTRADIO_ERA": "forties"})
+    assert excinfo.value.code == 2
+
+
+def test_controls_defaults_to_none():
+    config = Config.from_cli([], env={})
+    assert config.controls == "none"
+
+
+def test_controls_flag_and_env_with_flag_precedence():
+    assert Config.from_cli(["--controls", "keyboard"], env={}).controls == "keyboard"
+    assert Config.from_cli([], env={"OTRADIO_CONTROLS": "keyboard"}).controls == "keyboard"
+    config = Config.from_cli(
+        ["--controls", "none"], env={"OTRADIO_CONTROLS": "keyboard"}
+    )
+    assert config.controls == "none"
+
+
+def test_invalid_controls_value_exits_with_usage_error():
+    with pytest.raises(SystemExit) as excinfo:
+        Config.from_cli(["--controls", "gpio"], env={})
+    assert excinfo.value.code == 2
+    with pytest.raises(SystemExit) as excinfo:
+        Config.from_cli([], env={"OTRADIO_CONTROLS": "gpio"})
+    assert excinfo.value.code == 2

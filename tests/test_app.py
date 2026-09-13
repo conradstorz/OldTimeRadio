@@ -1,3 +1,4 @@
+import itertools
 import logging
 import random
 from datetime import date, datetime
@@ -10,6 +11,7 @@ from otradio.app import GREETING, Radio, build_radio, main
 from otradio.audio import NullPlayer, PygamePlayer
 from otradio.catalog import Catalog, Genre, LibraryNotFound, Recording
 from otradio.config import Config
+from otradio.controls import Command, KeyboardControls, NullControls
 from otradio.scheduler import AlternatingScheduler, EmptyLibrary
 from otradio.speech import NullSpeaker
 from otradio.store import InMemoryStore, JsonMetadataStore
@@ -340,3 +342,193 @@ def test_main_unexpected_exception_from_run_returns_exit_code_1(tmp_path, monkey
 def test_main_malformed_flag_raises_system_exit():
     with pytest.raises(SystemExit):
         main(["--volume", "abc"])
+
+
+# -- runtime controls ----------------------------------------------------
+
+
+class ScriptedControls:
+    def __init__(self, commands):
+        self._commands = list(commands)
+
+    def poll(self):
+        return self._commands.pop(0) if self._commands else None
+
+
+class RecordingSpeaker:
+    def __init__(self):
+        self.said = []
+
+    def say(self, text):
+        self.said.append(text)
+
+
+class BusyPlayer:
+    """Reports busy for a fixed number of polls, counts stop() calls."""
+
+    def __init__(self, busy_polls):
+        self._busy_polls = busy_polls
+        self.stopped = 0
+        self.closed = False
+        self.played = []
+
+    def start(self):
+        pass
+
+    def play(self, path):
+        self.played.append(path)
+
+    def stop(self):
+        self.stopped += 1
+        self._busy_polls = 0
+
+    def is_busy(self):
+        self._busy_polls -= 1
+        return self._busy_polls >= 0
+
+    def close(self):
+        self.closed = True
+
+
+def make_era_radio(controls, era=None):
+    catalog = Catalog(
+        [
+            Recording(
+                id="forties.mp3",
+                filename="forties.mp3",
+                path=Path("forties.mp3"),
+                release_date=date(1947, 1, 1),
+                genre=Genre.SHOW,
+            ),
+            Recording(
+                id="fifties.mp3",
+                filename="fifties.mp3",
+                path=Path("fifties.mp3"),
+                release_date=date(1952, 1, 1),
+                genre=Genre.SHOW,
+            ),
+            Recording(
+                id="commercial-a.mp3",
+                filename="commercial-a.mp3",
+                path=Path("commercial-a.mp3"),
+                release_date=None,
+                genre=Genre.COMMERCIAL,
+            ),
+        ]
+    )
+    config = Config.from_cli([], env={})
+    player = BusyPlayer(busy_polls=5)
+    speaker = RecordingSpeaker()
+    store = InMemoryStore()
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0), era=era)
+    clock = itertools.count(start=0.0, step=1.0)
+    radio = Radio(
+        config=config,
+        catalog=catalog,
+        scheduler=scheduler,
+        player=player,
+        speaker=speaker,
+        store=store,
+        controls=controls,
+        sleep=lambda _seconds: None,
+        now=lambda: datetime(1952, 7, 26, 19, 0),
+        monotonic=lambda: next(clock),
+    )
+    return radio, player, speaker, store, scheduler
+
+
+def test_cycle_era_command_stops_the_show_and_records_an_interruption():
+    radio, player, _speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=1)
+    assert player.stopped == 1
+    played_id = next(
+        rid for rid in ("forties.mp3", "fifties.mp3")
+        if store.stats_for(rid).num_of_plays == 1
+    )
+    interruptions = store.stats_for(played_id).interruptions
+    assert len(interruptions) == 1
+    assert interruptions[0].seconds_played == 1
+    assert scheduler.era == 1940  # None -> first decade
+
+
+def test_cycle_era_command_announces_the_new_era():
+    radio, _player, speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=1)
+    assert "playing the 1940s" in speaker.said
+
+
+def test_cycling_past_the_last_decade_announces_all_eras():
+    radio, _player, speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA]), era=1950
+    )
+    radio.run(max_iterations=1)
+    assert "playing all eras" in speaker.said
+
+
+def test_null_controls_change_nothing():
+    radio, player, speaker, store, scheduler = make_era_radio(NullControls())
+    radio.run(max_iterations=1)
+    assert player.stopped == 0
+    assert scheduler.era is None
+    assert speaker.said == [GREETING]
+
+
+def test_cycle_era_command_burst_coalesces_into_one_stop_and_announcement():
+    """A burst of queued CYCLE_ERA commands must not produce one one-tick
+    show per command: they are drained and applied as a single jump."""
+    radio, player, speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA, Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=1)
+    assert player.stopped == 1
+    assert scheduler.era == 1950
+    assert speaker.said == [GREETING, "playing the 1950s"]
+
+
+def test_cycle_era_end_to_end_third_pick_is_the_new_eras_show():
+    radio, player, _speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=3)
+    assert scheduler.era == 1940
+    assert [p.name for p in player.played][2] == "forties.mp3"
+    assert store.stats_for("forties.mp3").num_of_plays >= 1
+
+
+# -- build_radio controls/era wiring -------------------------------------
+
+
+def test_build_radio_wires_keyboard_controls_when_configured(tmp_path):
+    config = Config.from_cli(
+        ["--library", str(tmp_path), "--dry-run", "--controls", "keyboard"], env={}
+    )
+    radio = build_radio(config)
+    assert isinstance(radio._controls, KeyboardControls)
+
+
+def test_build_radio_defaults_to_null_controls(tmp_path):
+    config = Config.from_cli(["--library", str(tmp_path), "--dry-run"], env={})
+    radio = build_radio(config)
+    assert isinstance(radio._controls, NullControls)
+
+
+def test_build_radio_passes_the_configured_era_to_the_scheduler(tmp_path):
+    (tmp_path / "show-1947-01-01.mp3").touch()
+    config = Config.from_cli(
+        ["--library", str(tmp_path), "--dry-run", "--era", "1940"], env={}
+    )
+    radio = build_radio(config)
+    assert radio._scheduler.era == 1940
+
+
+def test_build_radio_falls_back_to_all_eras_when_the_decade_is_absent(tmp_path):
+    (tmp_path / "show-1947-01-01.mp3").touch()
+    config = Config.from_cli(
+        ["--library", str(tmp_path), "--dry-run", "--era", "1930"], env={}
+    )
+    radio = build_radio(config)
+    assert radio._scheduler.era is None

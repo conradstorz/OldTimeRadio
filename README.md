@@ -39,10 +39,16 @@ nothing there.
 | `--commercial-marker` | `OTRADIO_COMMERCIAL_MARKER` | `commercial` |
 | `--no-speech` | `OTRADIO_SPEECH` | speech on |
 | `--dry-run` | — | off |
+| `--era 1940` | `OTRADIO_ERA` | `all` |
+| `--controls keyboard\|none` | `OTRADIO_CONTROLS` | `none` |
 
 Recordings whose filename contains the commercial marker are treated as
 commercials and interleaved between shows. Broadcast dates are read from the
 filename where one is present.
+
+`--era` limits playback to shows from one decade (`--era all` is the
+default). With `--controls keyboard`, typing `e` + Enter at runtime cycles
+through the eras present in the library.
 
 ## Tests
 
