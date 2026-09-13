@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class Command(Enum):
     CYCLE_ERA = "cycle_era"
+    SKIP = "skip"
 
 
 class Controls(Protocol):
@@ -35,7 +36,7 @@ class NullControls:
 
 
 class KeyboardControls:
-    """Line-based commands from a stream: 'e' + Enter cycles the era.
+    """Line-based commands from a stream: 'e' + Enter cycles the era, 's' + Enter skips.
 
     A daemon thread reads the stream so poll() never blocks. The thread
     starts on the first poll, not in __init__, so construction does no I/O.
@@ -55,8 +56,11 @@ class KeyboardControls:
             line = self._queue.get_nowait()
         except queue.Empty:
             return None
-        if line.strip().lower() == "e":
+        text = line.strip().lower()
+        if text == "e":
             return Command.CYCLE_ERA
+        if text == "s":
+            return Command.SKIP
         return None
 
     def _read_lines(self) -> None:

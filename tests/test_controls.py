@@ -83,3 +83,13 @@ def test_keyboard_controls_reader_thread_death_is_logged_not_raised(
     assert controls._reader.is_alive() is False
     assert controls.poll() is None
     assert "Keyboard controls stopped reading input" in caplog.text
+
+
+def test_keyboard_controls_maps_s_to_skip():
+    controls = KeyboardControls(stream=io.StringIO("s\n"))
+    assert drain(controls) is Command.SKIP
+
+
+def test_keyboard_controls_skip_is_case_insensitive_and_strips():
+    controls = KeyboardControls(stream=io.StringIO("  S  \n"))
+    assert drain(controls) is Command.SKIP
