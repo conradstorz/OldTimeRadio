@@ -229,6 +229,15 @@ def test_json_store_quarantines_malformed_entry(tmp_path):
     assert (tmp_path / "otradio-stats.json.bad").exists()
 
 
+def test_json_store_quarantines_invalid_utf8(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_bytes(b"\xff\xfe\x00 not utf-8")
+    store = make_json_store(tmp_path)
+    assert store.stats_for("gunsmoke.mp3") == PlayStats()
+    assert not stats_path.exists()
+    assert (tmp_path / "otradio-stats.json.bad").read_bytes() == b"\xff\xfe\x00 not utf-8"
+
+
 def test_json_store_quarantine_overwrites_a_previous_bad_file(tmp_path):
     (tmp_path / "otradio-stats.json.bad").write_text("older garbage", encoding="utf-8")
     stats_path = tmp_path / "otradio-stats.json"
@@ -264,7 +273,7 @@ def test_json_store_goes_readonly_when_file_unreadable_and_unquarantinable(
     stats_path = tmp_path / "otradio-stats.json"
     stats_path.write_text("precious history", encoding="utf-8")
     monkeypatch.setattr(
-        Path, "read_text", lambda self, **kw: (_ for _ in ()).throw(PermissionError())
+        Path, "read_bytes", lambda self, **kw: (_ for _ in ()).throw(PermissionError())
     )
     monkeypatch.setattr(os, "replace", lambda src, dst: (_ for _ in ()).throw(PermissionError()))
     store = JsonMetadataStore(stats_path)

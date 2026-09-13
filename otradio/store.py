@@ -203,7 +203,7 @@ class JsonMetadataStore(InMemoryStore):
 
     def _load(self) -> None:
         try:
-            raw = self._path.read_text(encoding="utf-8")
+            raw = self._path.read_bytes()
         except FileNotFoundError:
             return
         except OSError:
@@ -216,13 +216,15 @@ class JsonMetadataStore(InMemoryStore):
                 )
             return
         try:
-            data = json.loads(raw)
+            data = json.loads(raw.decode("utf-8"))
             if not isinstance(data, dict) or data.get("version") != STATS_VERSION:
                 raise ValueError("unrecognized stats file format")
             self._stats = {
                 recording_id: _stats_from_json(entry)
                 for recording_id, entry in data["recordings"].items()
             }
+        # UnicodeDecodeError is a ValueError subclass, so an undecodable file
+        # is quarantined the same way as unparseable or wrong-shaped JSON.
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             logger.warning(
                 "%s is not a valid stats file (%s); discarding its history and "
@@ -258,6 +260,17 @@ class JsonMetadataStore(InMemoryStore):
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, self._path)
+            # os.replace() is atomic but not durable on its own: on POSIX the
+            # rename must be fsynced via the containing directory's fd, or a
+            # power cut can leave it unrecorded even though the write above
+            # was fsynced. Windows has no O_DIRECTORY; a failure here falls
+            # through to the same warn-once path as a write failure.
+            if hasattr(os, "O_DIRECTORY"):
+                dir_fd = os.open(self._path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
         except OSError as exc:
             # A stats file we cannot write must never stop the radio playing.
             if not self._write_warned:
