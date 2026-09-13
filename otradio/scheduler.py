@@ -43,6 +43,10 @@ class AlternatingScheduler:
         self._era = cycle[(position + 1) % len(cycle)]
         return self._era
 
+    def force_show_next(self) -> None:
+        """After a skip, a show plays next regardless of the alternation."""
+        self._want_commercial = False
+
     def next(self) -> Recording:
         shows = self._catalog.shows_for(self._era)
         commercials = self._catalog.commercials
