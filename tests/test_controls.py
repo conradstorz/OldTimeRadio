@@ -1,6 +1,5 @@
 import io
 import threading
-import time
 
 from otradio.controls import Command, KeyboardControls, NullControls
 
@@ -16,14 +15,18 @@ def test_keyboard_controls_starts_no_thread_before_first_poll():
     assert controls._reader is None
 
 
-def drain(controls, tries=50):
-    """Poll until a command appears or the injected stream is exhausted."""
-    for _ in range(tries):
+def drain(controls, timeout=5.0):
+    """Poll until a command appears or the finite injected stream is exhausted."""
+    command = controls.poll()  # first poll starts the reader thread
+    if command is not None:
+        return command
+    controls._reader.join(timeout)  # stream is finite; the thread exits fast
+    while True:
         command = controls.poll()
         if command is not None:
             return command
-        time.sleep(0.01)
-    return None
+        if controls._queue.empty():
+            return None
 
 
 def test_keyboard_controls_maps_e_to_cycle_era():
@@ -38,7 +41,7 @@ def test_keyboard_controls_is_case_insensitive_and_strips():
 
 def test_keyboard_controls_ignores_unknown_lines():
     controls = KeyboardControls(stream=io.StringIO("x\nquit\n"))
-    assert drain(controls, tries=20) is None
+    assert drain(controls) is None
 
 
 def test_keyboard_controls_poll_maps_queued_lines_without_a_live_thread():
