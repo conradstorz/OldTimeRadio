@@ -1,13 +1,16 @@
 """Play history for recordings.
 
-This module defines the persistence boundary. `InMemoryStore` is the current
-behavior — history lives for one run and is lost on exit, exactly as before.
-A future JsonMetadataStore implements the same protocol, and nothing else in
-the package changes.
+This module defines the persistence boundary. `InMemoryStore` keeps history
+for one run only; `JsonMetadataStore` persists it to a JSON file beside the
+recordings, flushing on every record because the appliance is normally
+powered off at the wall rather than shut down cleanly.
 """
 
+import json
+import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 
@@ -96,3 +99,114 @@ class InMemoryStore:
 
     def save(self) -> None:
         """No-op. Nothing is persisted yet."""
+
+
+STATS_VERSION = 1
+
+
+def _stats_to_json(stats: PlayStats) -> dict:
+    return {
+        "num_of_plays": stats.num_of_plays,
+        "last_played": (
+            stats.last_played.isoformat() if stats.last_played is not None else None
+        ),
+        "available": stats.available,
+        "unavailable_at": [when.isoformat() for when in stats.unavailable_at],
+        "interruptions": [
+            {"at": event.at.isoformat(), "seconds_played": event.seconds_played}
+            for event in stats.interruptions
+        ],
+    }
+
+
+def _stats_from_json(entry: dict) -> PlayStats:
+    return PlayStats(
+        num_of_plays=entry["num_of_plays"],
+        last_played=(
+            datetime.fromisoformat(entry["last_played"])
+            if entry["last_played"] is not None
+            else None
+        ),
+        available=entry["available"],
+        unavailable_at=[datetime.fromisoformat(t) for t in entry["unavailable_at"]],
+        interruptions=[
+            Interruption(
+                at=datetime.fromisoformat(event["at"]),
+                seconds_played=event["seconds_played"],
+            )
+            for event in entry["interruptions"]
+        ],
+    )
+
+
+class JsonMetadataStore(InMemoryStore):
+    """Play history persisted to one JSON file, flushed on every record.
+
+    The appliance is normally switched off at the wall, so save() cannot be
+    the persistence point (see MetadataStore). Every record_* call rewrites
+    the file atomically: serialize to `<path>.tmp` in the same directory,
+    then os.replace() over the real file. A power cut mid-write loses at
+    most the event being written, never the file.
+    """
+
+    def __init__(self, path: Path) -> None:
+        super().__init__()
+        self._path = path
+        self._load()
+
+    def record_played(self, recording_id: str, when: datetime) -> None:
+        super().record_played(recording_id, when)
+        self._flush()
+
+    def record_unavailable(self, recording_id: str, when: datetime) -> None:
+        super().record_unavailable(recording_id, when)
+        self._flush()
+
+    def record_interruption(
+        self, recording_id: str, when: datetime, seconds_played: int
+    ) -> None:
+        super().record_interruption(recording_id, when, seconds_played)
+        self._flush()
+
+    def save(self) -> None:
+        """Final flush on the rare clean exit."""
+        self._flush()
+
+    def _load(self) -> None:
+        try:
+            raw = self._path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return
+        except OSError:
+            self._quarantine()
+            return
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or data.get("version") != STATS_VERSION:
+                raise ValueError("unrecognized stats file format")
+            self._stats = {
+                recording_id: _stats_from_json(entry)
+                for recording_id, entry in data["recordings"].items()
+            }
+        except (ValueError, KeyError, TypeError, AttributeError):
+            self._stats = {}
+            self._quarantine()
+
+    def _flush(self) -> None:
+        payload = {
+            "version": STATS_VERSION,
+            "recordings": {
+                recording_id: _stats_to_json(stats)
+                for recording_id, stats in self._stats.items()
+            },
+        }
+        tmp = self._path.with_name(self._path.name + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(tmp, self._path)
+
+    def _quarantine(self) -> None:
+        """Set aside an unreadable stats file as `<path>.bad` and carry on."""
+        try:
+            os.replace(self._path, self._path.with_name(self._path.name + ".bad"))
+        except OSError:
+            pass
