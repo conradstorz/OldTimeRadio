@@ -50,11 +50,12 @@ nothing in the tested path reads audio data.
 
 ## Unimplemented, by design
 
-`InMemoryStore.save()` is a deliberate no-op — play history does not survive a
-reboot yet. The follow-on work, in order: a `JsonMetadataStore`, era/genre
-filtering, a skip control that records an `Interruption`, and `load_datetime()`
-(NTP → RTC → system clock). See
-`docs/superpowers/specs/2026-09-02-otradio-refactor-design.md`.
+`InMemoryStore.save()` is a no-op; normal runs use `JsonMetadataStore`, which
+persists play history to `otradio-stats.json` in the library directory,
+flushing on every record because the appliance is powered off at the wall.
+The follow-on work, in order: era/genre filtering, a skip control that
+records an `Interruption`, and `load_datetime()` (NTP → RTC → system clock).
+See `docs/superpowers/specs/2026-09-02-otradio-refactor-design.md`.
 
 Speech is an open item: `EspeakSpeaker` shells out to `espeak-ng` because the
 `espeak` Python binding is Python 2-era. If the binding installs on the Pi, an

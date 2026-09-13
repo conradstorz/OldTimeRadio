@@ -12,7 +12,7 @@ from otradio.catalog import Catalog, Genre, LibraryNotFound, Recording
 from otradio.config import Config
 from otradio.scheduler import AlternatingScheduler, EmptyLibrary
 from otradio.speech import NullSpeaker
-from otradio.store import InMemoryStore
+from otradio.store import InMemoryStore, JsonMetadataStore
 
 
 def make_recording(name: str, genre: Genre) -> Recording:
@@ -238,6 +238,30 @@ def test_build_radio_missing_library_dir_raises_library_not_found(tmp_path):
     )
     with pytest.raises(LibraryNotFound):
         build_radio(config)
+
+
+def test_build_radio_uses_a_json_store_in_the_library_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr("otradio.speech.shutil.which", lambda command: None)
+    config = Config.from_cli(["--library", str(tmp_path)], env={})
+    radio = build_radio(config)
+    assert isinstance(radio._store, JsonMetadataStore)
+    assert radio._store._path == tmp_path / "otradio-stats.json"
+
+
+def test_build_radio_dry_run_keeps_history_out_of_the_library(tmp_path):
+    config = Config.from_cli(["--library", str(tmp_path), "--dry-run"], env={})
+    radio = build_radio(config)
+    assert type(radio._store) is InMemoryStore
+
+
+def test_build_radio_does_not_catalog_the_stats_file(tmp_path):
+    (tmp_path / "show-a.mp3").touch()
+    (tmp_path / "otradio-stats.json").write_text(
+        '{"version": 1, "recordings": {}}', encoding="utf-8"
+    )
+    config = Config.from_cli(["--library", str(tmp_path), "--dry-run"], env={})
+    radio = build_radio(config)
+    assert [r.filename for r in radio._catalog.all] == ["show-a.mp3"]
 
 
 # -- main ----------------------------------------------------------------

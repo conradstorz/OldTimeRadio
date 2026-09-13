@@ -10,12 +10,13 @@ from otradio.catalog import Catalog, Recording
 from otradio.config import Config
 from otradio.scheduler import AlternatingScheduler
 from otradio.speech import Speaker, make_speaker
-from otradio.store import InMemoryStore, MetadataStore
+from otradio.store import InMemoryStore, JsonMetadataStore, MetadataStore
 
 logger = logging.getLogger(__name__)
 
 GREETING = "welcome to the old time radio project"
 POLL_INTERVAL_SECONDS = 1.0
+STATS_FILENAME = "otradio-stats.json"
 
 
 class Radio:
@@ -116,13 +117,20 @@ def build_radio(config: Config) -> Radio:
     player: Player = (
         NullPlayer() if config.dry_run else PygamePlayer(volume=config.volume)
     )
+    # Dry runs keep history in memory so off-device testing never writes
+    # into the library.
+    store: MetadataStore = (
+        InMemoryStore()
+        if config.dry_run
+        else JsonMetadataStore(config.library_dir / STATS_FILENAME)
+    )
     return Radio(
         config=config,
         catalog=catalog,
         scheduler=AlternatingScheduler(catalog),
         player=player,
         speaker=make_speaker(config),
-        store=InMemoryStore(),
+        store=store,
     )
 
 
