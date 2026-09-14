@@ -14,7 +14,7 @@ from otradio.config import Config
 from otradio.controls import Command, KeyboardControls, NullControls
 from otradio.scheduler import AlternatingScheduler, EmptyLibrary
 from otradio.speech import NullSpeaker
-from otradio.store import InMemoryStore, JsonMetadataStore
+from otradio.store import REASON_ERA_CHANGE, REASON_SKIP, InMemoryStore, JsonMetadataStore
 
 
 def make_recording(name: str, genre: Genre) -> Recording:
@@ -450,6 +450,7 @@ def test_cycle_era_command_stops_the_show_and_records_an_interruption():
     interruptions = store.stats_for(played_id).interruptions
     assert len(interruptions) == 1
     assert interruptions[0].seconds_played == 1
+    assert interruptions[0].reason == REASON_ERA_CHANGE
     assert scheduler.era == 1940  # None -> first decade
 
 
@@ -532,3 +533,133 @@ def test_build_radio_falls_back_to_all_eras_when_the_decade_is_absent(tmp_path):
     )
     radio = build_radio(config)
     assert radio._scheduler.era is None
+
+
+# -- skip command ----------------------------------------------------------
+
+
+def test_skip_stops_the_show_silently_and_a_show_plays_next():
+    radio, player, speaker, store, _scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert speaker.said == [GREETING]  # a skip is silent
+    skipped = player.played[0].name
+    interruptions = store.stats_for(skipped).interruptions
+    assert len(interruptions) == 1
+    assert interruptions[0].seconds_played == 1
+    assert interruptions[0].reason == REASON_SKIP
+    # The pick after a skipped show is another show, not the commercial the
+    # alternation would have chosen.
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+
+
+def test_unknown_command_is_a_no_op():
+    from enum import Enum
+
+    class OtherCommand(Enum):
+        MYSTERY = "mystery"
+
+    radio, player, _speaker, store, _scheduler = make_era_radio(
+        ScriptedControls([OtherCommand.MYSTERY])
+    )
+    radio.run(max_iterations=1)
+    assert player.stopped == 0
+    played_id = player.played[0].name
+    assert len(store.stats_for(played_id).interruptions) == 0
+
+
+def test_skip_during_a_commercial_stops_it_and_records_an_interruption():
+    radio, player, _speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    commercial = Recording(
+        id="commercial-a.mp3",
+        filename="commercial-a.mp3",
+        path=Path("commercial-a.mp3"),
+        release_date=None,
+        genre=Genre.COMMERCIAL,
+    )
+    stopped = radio._handle_command(commercial, started=0.0)
+    assert stopped is True
+    assert player.stopped == 1
+    assert scheduler.next().genre is Genre.SHOW
+    interruptions = store.stats_for("commercial-a.mp3").interruptions
+    assert len(interruptions) == 1
+    assert interruptions[0].reason == REASON_SKIP
+
+
+def test_reverse_burst_cycle_then_skip_coalesces_into_one_stop():
+    radio, player, speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA, Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert scheduler.era == 1940
+    assert "playing the 1940s" in speaker.said
+    assert player.played[1].name == "forties.mp3"
+    skipped = player.played[0].name
+    assert store.stats_for(skipped).interruptions[0].reason == REASON_SKIP
+
+
+def test_skip_then_normal_rhythm_resumes_with_a_commercial():
+    radio, player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    radio.run(max_iterations=3)
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+    assert player.played[2].name == "commercial-a.mp3"
+
+
+def test_skip_logs_a_journal_line(caplog):
+    radio, player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP])
+    )
+    with caplog.at_level(logging.INFO):
+        radio.run(max_iterations=1)
+    skipped = player.played[0].name
+    assert any(
+        record.message == f"Skipping {skipped}" for record in caplog.records
+    )
+
+
+def test_pure_era_change_does_not_log_a_skip_line(caplog):
+    radio, _player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA])
+    )
+    with caplog.at_level(logging.INFO):
+        radio.run(max_iterations=1)
+    assert not any(
+        record.message.startswith("Skipping") for record in caplog.records
+    )
+
+
+def test_drain_loop_never_drops_the_command_after_a_long_burst():
+    """A burst of 101 CYCLE_ERA commands followed by a SKIP (102 commands
+    total) must still have the SKIP honored: the drain loop must tally every
+    fetched command, not just the first 101."""
+    radio, player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA] * 101 + [Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    # A pure era-change burst alone would make the second pick a commercial
+    # (the normal alternation); a dropped SKIP would leave it that way. The
+    # SKIP forces a show next instead.
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+
+
+def test_mixed_skip_and_cycle_burst_coalesces_into_one_stop():
+    radio, player, speaker, store, scheduler = make_era_radio(
+        ScriptedControls([Command.SKIP, Command.CYCLE_ERA])
+    )
+    radio.run(max_iterations=2)
+    assert player.stopped == 1
+    assert scheduler.era == 1940
+    assert "playing the 1940s" in speaker.said
+    skipped = player.played[0].name
+    interruptions = store.stats_for(skipped).interruptions
+    assert len(interruptions) == 1
+    assert interruptions[0].reason == REASON_SKIP
+    # Era 1940 plus the forced show means the next pick is forties.mp3.
+    assert player.played[1].name == "forties.mp3"

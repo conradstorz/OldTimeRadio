@@ -153,3 +153,28 @@ def test_cycle_era_with_no_dated_shows_stays_on_all():
     scheduler = AlternatingScheduler(Catalog([undated, commercial()]), rng=random.Random(0))
     assert scheduler.cycle_era() is None
     assert scheduler.cycle_era() is None
+
+
+def test_force_show_next_overrides_a_pending_commercial():
+    catalog = Catalog([dated_show("forties.mp3", 1947), commercial()])
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0))
+    assert scheduler.next().genre is Genre.SHOW  # alternation now wants a commercial
+    scheduler.force_show_next()
+    assert scheduler.next().genre is Genre.SHOW
+
+
+def test_force_show_next_is_a_no_op_when_a_show_was_already_next():
+    catalog = Catalog([dated_show("forties.mp3", 1947), commercial()])
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0))
+    scheduler.force_show_next()
+    assert scheduler.next().genre is Genre.SHOW
+
+
+def test_force_show_next_respects_the_era_filter():
+    catalog = Catalog(
+        [dated_show("forties.mp3", 1947), dated_show("fifties.mp3", 1952), commercial()]
+    )
+    scheduler = AlternatingScheduler(catalog, rng=random.Random(0), era=1950)
+    scheduler.next()
+    scheduler.force_show_next()
+    assert scheduler.next().id == "fifties.mp3"

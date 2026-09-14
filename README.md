@@ -48,7 +48,8 @@ filename where one is present.
 
 `--era` limits playback to shows from one decade (`--era all` is the
 default). With `--controls keyboard`, typing `e` + Enter at runtime cycles
-through the eras present in the library.
+through the eras present in the library, and typing `s` + Enter skips the
+current recording.
 
 ## Tests
 
