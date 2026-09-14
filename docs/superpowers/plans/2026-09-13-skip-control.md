@@ -15,7 +15,7 @@
 - No new dependencies, flags, or env vars; no I/O at import time. Baseline: 179 tests passing.
 - No sample-until-match: the skip target comes from the existing pre-partitioned buckets.
 - After any skip (show or commercial), the next pick is a show; the alternation resumes after that.
-- Skips are silent — no speech, no log announcement. Era announcements stay exactly `"playing all eras"` / `f"playing the {era}s"` and are spoken only when the era changed.
+- Skips are silent to the listener — no speech — but still produce a `logger.info("Skipping %s", ...)` journal line for diagnosability. Era announcements stay exactly `"playing all eras"` / `f"playing the {era}s"` and are spoken only when the era changed.
 - A command burst coalesces into exactly one recorded `Interruption`, one `player.stop()`, and at most one announcement.
 
 ---
@@ -270,8 +270,12 @@ In `otradio/app.py`, replace `_handle_command` entirely:
             era = self._scheduler.cycle_era()
         if skip:
             self._scheduler.force_show_next()
+            logger.info("Skipping %s", recording.filename)
         seconds_played = int(self._monotonic() - started)
-        self._store.record_interruption(recording.id, self._now(), seconds_played)
+        reason = REASON_SKIP if skip else REASON_ERA_CHANGE
+        self._store.record_interruption(
+            recording.id, self._now(), seconds_played, reason=reason
+        )
         self._player.stop()
         if cycles:
             announcement = "playing all eras" if era is None else f"playing the {era}s"

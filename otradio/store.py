@@ -22,7 +22,9 @@ REASON_ERA_CHANGE = "era_change"
 
 @dataclass(frozen=True)
 class Interruption:
-    """A recording the listener skipped, and how far it got."""
+    """A recording stopped early — by a skip or an era change — and how far
+    it got. `reason` (REASON_SKIP or REASON_ERA_CHANGE) distinguishes the
+    two."""
 
     at: datetime
     seconds_played: int
@@ -101,6 +103,7 @@ class InMemoryStore:
     def record_interruption(
         self, recording_id: str, when: datetime, seconds_played: int, reason: str
     ) -> None:
+        reason = _require_reason(reason)
         stats = self._mutable_stats_for(recording_id)
         stats.interruptions.append(
             Interruption(at=when, seconds_played=seconds_played, reason=reason)

@@ -72,6 +72,34 @@ def test_record_interruption_stores_era_change_reason():
     assert interruptions[0].reason == REASON_ERA_CHANGE
 
 
+def test_record_interruption_rejects_an_invalid_reason():
+    store = InMemoryStore()
+    when = datetime(1952, 7, 26)
+    try:
+        store.record_interruption(
+            "gunsmoke.mp3", when, seconds_played=42, reason="typo"
+        )
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+    assert store.stats_for("gunsmoke.mp3").interruptions == []
+
+
+def test_json_store_record_interruption_rejects_an_invalid_reason_and_writes_nothing(
+    tmp_path,
+):
+    store = make_json_store(tmp_path)
+    when = datetime(1952, 7, 26)
+    try:
+        store.record_interruption(
+            "gunsmoke.mp3", when, seconds_played=42, reason="typo"
+        )
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+    assert not (tmp_path / "otradio-stats.json").exists()
+
+
 def test_stats_are_kept_per_recording():
     store = InMemoryStore()
     store.record_played("a.mp3", datetime(1952, 7, 26))

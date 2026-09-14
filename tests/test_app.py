@@ -635,6 +635,20 @@ def test_pure_era_change_does_not_log_a_skip_line(caplog):
     )
 
 
+def test_drain_loop_never_drops_the_command_after_a_long_burst():
+    """A burst of 101 CYCLE_ERA commands followed by a SKIP (102 commands
+    total) must still have the SKIP honored: the drain loop must tally every
+    fetched command, not just the first 101."""
+    radio, player, _speaker, _store, _scheduler = make_era_radio(
+        ScriptedControls([Command.CYCLE_ERA] * 101 + [Command.SKIP])
+    )
+    radio.run(max_iterations=2)
+    # A pure era-change burst alone would make the second pick a commercial
+    # (the normal alternation); a dropped SKIP would leave it that way. The
+    # SKIP forces a show next instead.
+    assert player.played[1].name in ("forties.mp3", "fifties.mp3")
+
+
 def test_mixed_skip_and_cycle_burst_coalesces_into_one_stop():
     radio, player, speaker, store, scheduler = make_era_radio(
         ScriptedControls([Command.SKIP, Command.CYCLE_ERA])

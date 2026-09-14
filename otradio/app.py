@@ -129,14 +129,22 @@ class Radio:
             return False
         cycles = 0
         skip = False
-        for _ in range(101):  # 101: the first command is already in hand; bound the drain against a stuck key
+        if command is Command.CYCLE_ERA:
+            cycles += 1
+        elif command is Command.SKIP:
+            skip = True
+        # 101 extra polls beyond the first command already in hand: bounds
+        # the drain against a stuck key. Every command polled here is
+        # tallied immediately, so nothing fetched from the queue is ever
+        # dropped on the floor.
+        for _ in range(101):
+            command = self._controls.poll()
+            if command is None:
+                break
             if command is Command.CYCLE_ERA:
                 cycles += 1
             elif command is Command.SKIP:
                 skip = True
-            command = self._controls.poll()
-            if command is None:
-                break
         if not cycles and not skip:
             return False
         era = None
