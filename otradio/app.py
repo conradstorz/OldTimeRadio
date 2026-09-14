@@ -11,7 +11,13 @@ from otradio.config import Config
 from otradio.controls import Command, Controls, KeyboardControls, NullControls
 from otradio.scheduler import AlternatingScheduler
 from otradio.speech import Speaker, make_speaker
-from otradio.store import InMemoryStore, JsonMetadataStore, MetadataStore
+from otradio.store import (
+    REASON_ERA_CHANGE,
+    REASON_SKIP,
+    InMemoryStore,
+    JsonMetadataStore,
+    MetadataStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +144,12 @@ class Radio:
             era = self._scheduler.cycle_era()
         if skip:
             self._scheduler.force_show_next()
+            logger.info("Skipping %s", recording.filename)
         seconds_played = int(self._monotonic() - started)
-        self._store.record_interruption(recording.id, self._now(), seconds_played)
+        reason = REASON_SKIP if skip else REASON_ERA_CHANGE
+        self._store.record_interruption(
+            recording.id, self._now(), seconds_played, reason=reason
+        )
         self._player.stop()
         if cycles:
             announcement = "playing all eras" if era is None else f"playing the {era}s"

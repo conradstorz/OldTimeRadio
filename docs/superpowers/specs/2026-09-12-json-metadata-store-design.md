@@ -40,14 +40,16 @@ stats path.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "recordings": {
     "shows/some-show-1948-05-01.mp3": {
       "num_of_plays": 3,
       "last_played": "2026-09-12T14:03:22",
       "available": true,
       "unavailable_at": ["2026-09-10T09:00:00"],
-      "interruptions": [{"at": "2026-09-11T20:15:00", "seconds_played": 340}]
+      "interruptions": [
+        {"at": "2026-09-11T20:15:00", "seconds_played": 340, "reason": "skip"}
+      ]
     }
   }
 }
@@ -55,7 +57,10 @@ stats path.
 
 - Datetimes serialize via `datetime.isoformat()` and parse via `datetime.fromisoformat()`.
 - `last_played` and `available` may be `null`, matching `PlayStats` defaults.
-- `version` exists so a future format change can migrate instead of discarding.
+- `version` exists so a future format change can migrate instead of discarding. Version 2
+  added the interruption `reason` (`"skip"` or `"era_change"`); nothing was deployed
+  under version 1, so a version-1 file quarantines via the existing unknown-version path
+  rather than migrating.
 
 ### Atomic writes
 

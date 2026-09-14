@@ -16,6 +16,9 @@ from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
+REASON_SKIP = "skip"
+REASON_ERA_CHANGE = "era_change"
+
 
 @dataclass(frozen=True)
 class Interruption:
@@ -23,6 +26,7 @@ class Interruption:
 
     at: datetime
     seconds_played: int
+    reason: str
 
 
 @dataclass
@@ -58,7 +62,7 @@ class MetadataStore(Protocol):
     def record_unavailable(self, recording_id: str, when: datetime) -> None: ...
 
     def record_interruption(
-        self, recording_id: str, when: datetime, seconds_played: int
+        self, recording_id: str, when: datetime, seconds_played: int, reason: str
     ) -> None: ...
 
     def save(self) -> None: ...
@@ -95,16 +99,18 @@ class InMemoryStore:
         stats.available = False
 
     def record_interruption(
-        self, recording_id: str, when: datetime, seconds_played: int
+        self, recording_id: str, when: datetime, seconds_played: int, reason: str
     ) -> None:
         stats = self._mutable_stats_for(recording_id)
-        stats.interruptions.append(Interruption(at=when, seconds_played=seconds_played))
+        stats.interruptions.append(
+            Interruption(at=when, seconds_played=seconds_played, reason=reason)
+        )
 
     def save(self) -> None:
         """No-op by design: this store keeps history for one run only."""
 
 
-STATS_VERSION = 1
+STATS_VERSION = 2
 
 
 def _stats_to_json(stats: PlayStats) -> dict:
@@ -116,7 +122,11 @@ def _stats_to_json(stats: PlayStats) -> dict:
         "available": stats.available,
         "unavailable_at": [when.isoformat() for when in stats.unavailable_at],
         "interruptions": [
-            {"at": event.at.isoformat(), "seconds_played": event.seconds_played}
+            {
+                "at": event.at.isoformat(),
+                "seconds_played": event.seconds_played,
+                "reason": event.reason,
+            }
             for event in stats.interruptions
         ],
     }
@@ -127,6 +137,12 @@ def _require_int(value: object, field_name: str) -> int:
     # silently pass as a play count or a duration.
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be an int, got {value!r}")
+    return value
+
+
+def _require_reason(value: object) -> str:
+    if value not in (REASON_SKIP, REASON_ERA_CHANGE):
+        raise ValueError(f"reason must be {REASON_SKIP!r} or {REASON_ERA_CHANGE!r}, got {value!r}")
     return value
 
 
@@ -160,6 +176,7 @@ def _stats_from_json(entry: dict) -> PlayStats:
                 seconds_played=_require_int(
                     event["seconds_played"], "seconds_played"
                 ),
+                reason=_require_reason(event["reason"]),
             )
             for event in interruptions
         ],
@@ -192,9 +209,9 @@ class JsonMetadataStore(InMemoryStore):
         self._flush()
 
     def record_interruption(
-        self, recording_id: str, when: datetime, seconds_played: int
+        self, recording_id: str, when: datetime, seconds_played: int, reason: str
     ) -> None:
-        super().record_interruption(recording_id, when, seconds_played)
+        super().record_interruption(recording_id, when, seconds_played, reason)
         self._flush()
 
     def save(self) -> None:

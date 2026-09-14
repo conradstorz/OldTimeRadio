@@ -26,8 +26,12 @@ env var (skip rides the existing `--controls` selection); announcements for skip
   with no eligible shows, the scheduler's existing empty-bucket fallback keeps
   playing commercials rather than stalling.)
 - Skips are silent: no speech, no era change. The next show starting is the feedback.
+  A skip is still logged to the journal (`logger.info`) so stopped playback is
+  diagnosable; silence is about speech.
 - A skip records exactly one `Interruption` (`recording.id`, wall-clock now, elapsed
-  seconds from the same monotonic base the watchdog uses), same as an era change.
+  seconds from the same monotonic base the watchdog uses), same as an era change. The
+  recorded `reason` is `"skip"` for a skip (a mixed burst counts as a skip — the
+  listener explicitly rejected the recording) and `"era_change"` for a pure era change.
 
 ## Design
 

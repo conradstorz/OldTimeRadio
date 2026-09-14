@@ -3,7 +3,14 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from otradio.store import InMemoryStore, Interruption, JsonMetadataStore, PlayStats
+from otradio.store import (
+    REASON_ERA_CHANGE,
+    REASON_SKIP,
+    InMemoryStore,
+    Interruption,
+    JsonMetadataStore,
+    PlayStats,
+)
 
 
 def test_unknown_recording_starts_with_blank_stats():
@@ -47,11 +54,22 @@ def test_record_unavailable_appends_timestamp_and_marks_unavailable():
 def test_record_interruption_appends_event():
     store = InMemoryStore()
     when = datetime(1952, 7, 26)
-    store.record_interruption("gunsmoke.mp3", when, seconds_played=42)
+    store.record_interruption("gunsmoke.mp3", when, seconds_played=42, reason=REASON_SKIP)
     interruptions = store.stats_for("gunsmoke.mp3").interruptions
     assert len(interruptions) == 1
     assert interruptions[0].at == when
     assert interruptions[0].seconds_played == 42
+    assert interruptions[0].reason == REASON_SKIP
+
+
+def test_record_interruption_stores_era_change_reason():
+    store = InMemoryStore()
+    when = datetime(1952, 7, 26)
+    store.record_interruption(
+        "gunsmoke.mp3", when, seconds_played=42, reason=REASON_ERA_CHANGE
+    )
+    interruptions = store.stats_for("gunsmoke.mp3").interruptions
+    assert interruptions[0].reason == REASON_ERA_CHANGE
 
 
 def test_stats_are_kept_per_recording():
@@ -96,9 +114,9 @@ def test_stats_for_mutating_returned_unavailable_at_does_not_corrupt_store():
 def test_stats_for_mutating_returned_interruptions_does_not_corrupt_store():
     store = InMemoryStore()
     when = datetime(1952, 7, 26)
-    store.record_interruption("gunsmoke.mp3", when, seconds_played=42)
+    store.record_interruption("gunsmoke.mp3", when, seconds_played=42, reason=REASON_SKIP)
     stats = store.stats_for("gunsmoke.mp3")
-    stats.interruptions.append(Interruption(at=when, seconds_played=1))
+    stats.interruptions.append(Interruption(at=when, seconds_played=1, reason=REASON_SKIP))
     assert len(store.stats_for("gunsmoke.mp3").interruptions) == 1
 
 
@@ -126,7 +144,10 @@ def test_json_store_round_trips_history_across_instances(tmp_path):
     store.record_played("gunsmoke.mp3", datetime(1952, 7, 26, 19, 0))
     store.record_unavailable("broken.mp3", datetime(1952, 7, 27, 9, 30))
     store.record_interruption(
-        "gunsmoke.mp3", datetime(1952, 7, 28, 20, 15), seconds_played=340
+        "gunsmoke.mp3",
+        datetime(1952, 7, 28, 20, 15),
+        seconds_played=340,
+        reason=REASON_SKIP,
     )
 
     reloaded = make_json_store(tmp_path)
@@ -135,7 +156,11 @@ def test_json_store_round_trips_history_across_instances(tmp_path):
     assert stats.last_played == datetime(1952, 7, 26, 19, 0)
     assert stats.available is True
     assert stats.interruptions == [
-        Interruption(at=datetime(1952, 7, 28, 20, 15), seconds_played=340)
+        Interruption(
+            at=datetime(1952, 7, 28, 20, 15),
+            seconds_played=340,
+            reason=REASON_SKIP,
+        )
     ]
     broken = reloaded.stats_for("broken.mp3")
     assert broken.available is False
@@ -162,7 +187,7 @@ def test_json_store_writes_the_documented_format(tmp_path):
     store = make_json_store(tmp_path)
     store.record_played("gunsmoke.mp3", datetime(1952, 7, 26, 19, 0))
     data = json.loads((tmp_path / "otradio-stats.json").read_text(encoding="utf-8"))
-    assert data["version"] == 1
+    assert data["version"] == 2
     entry = data["recordings"]["gunsmoke.mp3"]
     assert entry == {
         "num_of_plays": 1,
@@ -171,6 +196,21 @@ def test_json_store_writes_the_documented_format(tmp_path):
         "unavailable_at": [],
         "interruptions": [],
     }
+
+
+def test_json_store_writes_the_documented_interruption_format(tmp_path):
+    store = make_json_store(tmp_path)
+    store.record_interruption(
+        "gunsmoke.mp3",
+        datetime(1952, 7, 28, 20, 15),
+        seconds_played=340,
+        reason=REASON_SKIP,
+    )
+    data = json.loads((tmp_path / "otradio-stats.json").read_text(encoding="utf-8"))
+    entry = data["recordings"]["gunsmoke.mp3"]
+    assert entry["interruptions"] == [
+        {"at": "1952-07-28T20:15:00", "seconds_played": 340, "reason": "skip"}
+    ]
 
 
 def test_json_store_save_is_a_flush_and_does_not_raise(tmp_path):
@@ -218,14 +258,73 @@ def test_json_store_quarantines_unknown_version(tmp_path):
     assert (tmp_path / "otradio-stats.json.bad").exists()
 
 
-def test_json_store_quarantines_malformed_entry(tmp_path):
+def test_json_store_quarantines_version_1_files(tmp_path):
+    """Version 2 added the interruption reason; nothing was deployed under
+    version 1, so an old-shaped file quarantines by design rather than
+    migrating."""
     stats_path = tmp_path / "otradio-stats.json"
     stats_path.write_text(
-        json.dumps({"version": 1, "recordings": {"a.mp3": {"num_of_plays": 1}}}),
+        json.dumps(
+            {
+                "version": 1,
+                "recordings": {
+                    "a.mp3": {
+                        "num_of_plays": 1,
+                        "last_played": None,
+                        "available": None,
+                        "unavailable_at": [],
+                        "interruptions": [],
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
     store = make_json_store(tmp_path)
     assert store.stats_for("a.mp3") == PlayStats()
+    assert not stats_path.exists()
+    assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_quarantines_malformed_entry(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(
+        json.dumps({"version": 2, "recordings": {"a.mp3": {"num_of_plays": 1}}}),
+        encoding="utf-8",
+    )
+    store = make_json_store(tmp_path)
+    assert store.stats_for("a.mp3") == PlayStats()
+    assert (tmp_path / "otradio-stats.json.bad").exists()
+
+
+def test_json_store_quarantines_invalid_interruption_reason(tmp_path):
+    stats_path = tmp_path / "otradio-stats.json"
+    stats_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "recordings": {
+                    "a.mp3": {
+                        "num_of_plays": 0,
+                        "last_played": None,
+                        "available": None,
+                        "unavailable_at": [],
+                        "interruptions": [
+                            {
+                                "at": "1952-07-26T00:00:00",
+                                "seconds_played": 5,
+                                "reason": "bogus",
+                            }
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = make_json_store(tmp_path)
+    assert store.stats_for("a.mp3") == PlayStats()
+    assert not stats_path.exists()
     assert (tmp_path / "otradio-stats.json.bad").exists()
 
 
@@ -290,7 +389,7 @@ def test_json_store_quarantines_wrong_typed_num_of_plays(tmp_path):
     stats_path.write_text(
         json.dumps(
             {
-                "version": 1,
+                "version": 2,
                 "recordings": {
                     "a.mp3": {
                         "num_of_plays": "lots",
